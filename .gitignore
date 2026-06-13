@@ -1,0 +1,10 @@
+node_modules/
+.next/
+out/
+.env
+.env.local
+*.wav
+*.mp3
+.DS_Store
+*.pyc
+__pycache__/
