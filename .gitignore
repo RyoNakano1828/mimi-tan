@@ -3,6 +3,7 @@ node_modules/
 out/
 .env
 .env.local
+credentials/
 *.wav
 *.mp3
 .DS_Store

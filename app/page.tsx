@@ -2,12 +2,16 @@
 
 import { useState } from "react";
 import WordInput from "@/components/WordInput";
+import WordGeneratorPanel from "@/components/WordGeneratorPanel";
 import ThemeCard from "@/components/ThemeCard";
 import DownloadSection from "@/components/DownloadSection";
 import StudyMode from "@/components/StudyMode";
 import type { GenerateResult } from "@/lib/types";
 
+type InputMode = "manual" | "ai";
+
 export default function Home() {
+  const [inputMode, setInputMode] = useState<InputMode>("manual");
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -44,6 +48,18 @@ export default function Home() {
     }
   };
 
+  const tabStyle = (active: boolean): React.CSSProperties => ({
+    flex: 1,
+    padding: "12px 16px",
+    fontSize: "14px",
+    fontWeight: 600,
+    background: active ? "var(--accent)" : "var(--bg-input)",
+    color: active ? "#fff" : "var(--text-secondary)",
+    border: `2px solid ${active ? "var(--accent)" : "var(--border)"}`,
+    borderRadius: "var(--radius)",
+    transition: "all 0.2s",
+  });
+
   return (
     <main
       style={{
@@ -70,6 +86,36 @@ export default function Home() {
           単語リストからTOEIC向け例文を自動生成
         </p>
       </header>
+
+      <div
+        style={{
+          display: "flex",
+          gap: "10px",
+          marginBottom: "24px",
+        }}
+      >
+        <button
+          type="button"
+          onClick={() => setInputMode("manual")}
+          style={tabStyle(inputMode === "manual")}
+        >
+          手入力
+        </button>
+        <button
+          type="button"
+          onClick={() => setInputMode("ai")}
+          style={tabStyle(inputMode === "ai")}
+        >
+          AIで単語生成
+        </button>
+      </div>
+
+      {inputMode === "ai" && (
+        <WordGeneratorPanel
+          onWordsGenerated={setInput}
+          disabled={loading}
+        />
+      )}
 
       <section style={{ marginBottom: "24px" }}>
         <WordInput value={input} onChange={setInput} disabled={loading} />
