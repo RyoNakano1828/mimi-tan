@@ -3,6 +3,9 @@
     "app/api/generate/route.ts": {
       "maxDuration": 120
     },
+    "app/api/generate-words/route.ts": {
+      "maxDuration": 60
+    },
     "app/api/download-audio/route.ts": {
       "maxDuration": 300
     }

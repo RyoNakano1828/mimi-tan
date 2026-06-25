@@ -12,18 +12,39 @@ function getApiKey(): string {
 }
 
 function getModel(): string {
-  return process.env.GEMINI_MODEL || DEFAULT_MODEL;
+  return process.env.GEMINI_MODEL?.trim() || DEFAULT_MODEL;
 }
 
-function parseRetryDelayMs(message: string): number {
-  const match = message.match(/retry in (\d+(?:\.\d+)?)s/i);
-  if (match) return Math.ceil(parseFloat(match[1]) * 1000) + 500;
-  return 30000;
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+function isOverloadedError(error: unknown): boolean {
+  const msg = errorMessage(error);
+  return (
+    msg.includes("503") ||
+    msg.includes("high demand") ||
+    msg.includes("Service Unavailable") ||
+    msg.includes("UNAVAILABLE")
+  );
 }
 
 function isQuotaError(error: unknown): boolean {
-  const msg = error instanceof Error ? error.message : String(error);
+  const msg = errorMessage(error);
   return msg.includes("429") || msg.includes("quota") || msg.includes("Quota exceeded");
+}
+
+function isTransientError(error: unknown): boolean {
+  return isOverloadedError(error) || isQuotaError(error);
+}
+
+function getRetryDelayMs(error: unknown, attempt: number): number {
+  if (isOverloadedError(error)) {
+    return Math.min(2000 * 2 ** attempt, 8000);
+  }
+  const match = errorMessage(error).match(/retry in (\d+(?:\.\d+)?)s/i);
+  if (match) return Math.ceil(parseFloat(match[1]) * 1000) + 500;
+  return 30000;
 }
 
 function sleep(ms: number): Promise<void> {
@@ -43,39 +64,43 @@ export async function generateJson<T>(
   prompt: string,
   temperature: number
 ): Promise<T> {
+  const modelName = getModel();
   const genAI = new GoogleGenerativeAI(getApiKey());
   const model = genAI.getGenerativeModel({
-    model: getModel(),
+    model: modelName,
     generationConfig: {
       responseMimeType: "application/json",
       temperature,
     },
   });
 
-  let lastError: unknown;
+  let sawOverload = false;
 
   for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
     try {
       const result = await model.generateContent(prompt);
       return parseJsonText<T>(result.response.text());
     } catch (error) {
-      lastError = error;
-      if (isQuotaError(error) && attempt < MAX_RETRIES) {
-        const delay = parseRetryDelayMs(
-          error instanceof Error ? error.message : String(error)
-        );
-        await sleep(delay);
+      if (!isTransientError(error)) {
+        throw error;
+      }
+
+      if (isOverloadedError(error)) sawOverload = true;
+
+      if (attempt < MAX_RETRIES) {
+        await sleep(getRetryDelayMs(error, attempt));
         continue;
       }
-      if (isQuotaError(error)) {
-        throw new Error(
-          `Gemini API の利用上限に達しました（モデル: ${getModel()}）。` +
-            "しばらく待ってから再試行するか、GEMINI_MODEL=gemini-2.5-flash-lite を .env.local に設定してください。"
-        );
-      }
-      throw error;
     }
   }
 
-  throw lastError;
+  if (sawOverload) {
+    throw new Error(
+      `Gemini API が混雑しています（503）。30秒〜1分待ってから再実行してください。（モデル: ${modelName}）`
+    );
+  }
+
+  throw new Error(
+    `Gemini API の利用上限に達しました。1〜2分待ってから再実行してください。（モデル: ${modelName}）`
+  );
 }
