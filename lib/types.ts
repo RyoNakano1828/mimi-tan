@@ -39,3 +39,21 @@ export const DIFFICULTY_OPTIONS = [
   { value: "600", label: "中級（600点前後）" },
   { value: "700-800", label: "上級（700〜800点）" },
 ] as const;
+
+export interface SavedSessionSummary {
+  id: string;
+  title: string | null;
+  words: string[];
+  total_words: number;
+  total_sentences: number;
+  audio_path: string | null;
+  created_at: string;
+}
+
+export interface SavedSessionDetail extends SavedSessionSummary {
+  situation: string | null;
+  difficulty: string | null;
+  txt_content: string;
+  groups: ThemeGroup[];
+  audio_url: string | null;
+}

@@ -1,11 +1,13 @@
--- migrations/20260613_0005_auth_sync.sql
--- Create public.users row when an auth.users row is created.
--- Run after RLS/tables are created.
+-- auth トリガー修正: カラム名 + SECURITY DEFINER + 失敗しても登録をブロックしない
+-- Supabase SQL Editor で実行してください
 
 CREATE OR REPLACE FUNCTION public.handle_auth_user_created()
-RETURNS TRIGGER AS $$
+RETURNS TRIGGER
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
 BEGIN
-  -- Insert a profile row mapping auth users.id -> public.users.auth_id
   INSERT INTO public.users (id, auth_id, email, display_name, created_at, updated_at)
   VALUES (
     gen_random_uuid(),
@@ -21,12 +23,16 @@ BEGIN
         updated_at = now();
 
   RETURN NEW;
+EXCEPTION WHEN OTHERS THEN
+  RAISE WARNING 'handle_auth_user_created failed: %', SQLERRM;
+  RETURN NEW;
 END;
-$$ LANGUAGE plpgsql;
+$$;
 
--- Trigger on auth.users (Supabase auth schema)
 DROP TRIGGER IF EXISTS trg_auth_user_created ON auth.users;
 CREATE TRIGGER trg_auth_user_created
   AFTER INSERT ON auth.users
   FOR EACH ROW
   EXECUTE FUNCTION public.handle_auth_user_created();
+
+GRANT EXECUTE ON FUNCTION public.handle_auth_user_created() TO supabase_auth_admin;

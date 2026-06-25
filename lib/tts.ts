@@ -1,3 +1,5 @@
+import "server-only";
+
 import fs from "fs";
 import path from "path";
 import { TextToSpeechClient } from "@google-cloud/text-to-speech";

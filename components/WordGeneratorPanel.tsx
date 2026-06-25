@@ -4,7 +4,10 @@ import { useState } from "react";
 import { DIFFICULTY_OPTIONS, SITUATION_OPTIONS } from "@/lib/types";
 
 interface WordGeneratorPanelProps {
-  onWordsGenerated: (words: string) => void;
+  onWordsGenerated: (
+    words: string,
+    meta?: { situation: string; difficulty: string }
+  ) => void;
   disabled?: boolean;
 }
 
@@ -12,9 +15,9 @@ export default function WordGeneratorPanel({
   onWordsGenerated,
   disabled,
 }: WordGeneratorPanelProps) {
-  const [situation, setSituation] = useState(SITUATION_OPTIONS[0]);
+  const [situation, setSituation] = useState<string>(SITUATION_OPTIONS[0]);
   const [customSituation, setCustomSituation] = useState("");
-  const [difficulty, setDifficulty] = useState(DIFFICULTY_OPTIONS[1].value);
+  const [difficulty, setDifficulty] = useState<string>(DIFFICULTY_OPTIONS[1].value);
   const [count, setCount] = useState(10);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -47,7 +50,10 @@ export default function WordGeneratorPanel({
         throw new Error(data.error || "単語生成に失敗しました");
       }
 
-      onWordsGenerated(data.words.join("\n"));
+      onWordsGenerated(data.words.join("\n"), {
+        situation: effectiveSituation,
+        difficulty,
+      });
     } catch (err) {
       setError(err instanceof Error ? err.message : "単語生成に失敗しました");
     } finally {

@@ -1,11 +1,14 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import WordInput from "@/components/WordInput";
 import WordGeneratorPanel from "@/components/WordGeneratorPanel";
 import ThemeCard from "@/components/ThemeCard";
 import DownloadSection from "@/components/DownloadSection";
 import StudyMode from "@/components/StudyMode";
+import AuthPanel from "@/components/AuthPanel";
+import SaveSessionButton from "@/components/SaveSessionButton";
 import type { GenerateResult } from "@/lib/types";
 
 type InputMode = "manual" | "ai";
@@ -13,6 +16,9 @@ type InputMode = "manual" | "ai";
 export default function Home() {
   const [inputMode, setInputMode] = useState<InputMode>("manual");
   const [input, setInput] = useState("");
+  const [situation, setSituation] = useState<string>();
+  const [difficulty, setDifficulty] = useState<string>();
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [result, setResult] = useState<GenerateResult | null>(null);
@@ -69,6 +75,20 @@ export default function Home() {
       }}
     >
       <header style={{ textAlign: "center", marginBottom: "40px" }}>
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "flex-end",
+            marginBottom: "16px",
+          }}
+        >
+          <Link
+            href="/review"
+            style={{ fontSize: "14px", color: "var(--accent-light)" }}
+          >
+            復習一覧 →
+          </Link>
+        </div>
         <h1
           style={{
             fontSize: "clamp(28px, 5vw, 40px)",
@@ -86,6 +106,8 @@ export default function Home() {
           単語リストからTOEIC向け例文を自動生成
         </p>
       </header>
+
+      <AuthPanel onAuthChange={(user) => setIsLoggedIn(!!user)} />
 
       <div
         style={{
@@ -112,7 +134,11 @@ export default function Home() {
 
       {inputMode === "ai" && (
         <WordGeneratorPanel
-          onWordsGenerated={setInput}
+          onWordsGenerated={(words, meta) => {
+            setInput(words);
+            setSituation(meta?.situation);
+            setDifficulty(meta?.difficulty);
+          }}
           disabled={loading}
         />
       )}
@@ -218,7 +244,27 @@ export default function Home() {
 
           <StudyMode groups={result.groups} />
 
-          <DownloadSection txtContent={result.txtContent} />
+          <div
+            style={{
+              display: "flex",
+              gap: "12px",
+              justifyContent: "center",
+              flexWrap: "wrap",
+              padding: "32px 0 0",
+            }}
+          >
+            <DownloadSection txtContent={result.txtContent} />
+          </div>
+
+          <div style={{ textAlign: "center", paddingBottom: "32px" }}>
+            <SaveSessionButton
+              result={result}
+              wordsInput={input}
+              situation={situation}
+              difficulty={difficulty}
+              isLoggedIn={isLoggedIn}
+            />
+          </div>
         </>
       )}
     </main>

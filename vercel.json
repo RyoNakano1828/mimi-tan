@@ -8,6 +8,9 @@
     },
     "app/api/download-audio/route.ts": {
       "maxDuration": 300
+    },
+    "app/api/sessions/save/route.ts": {
+      "maxDuration": 300
     }
   }
 }

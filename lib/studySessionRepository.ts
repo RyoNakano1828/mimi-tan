@@ -1,0 +1,318 @@
+import "server-only";
+
+import { createAdminClient } from "./supabaseAdmin";
+import { generateAudioFromTxt } from "./tts";
+import type {
+  GenerateResult,
+  SavedSessionDetail,
+  SavedSessionSummary,
+  ThemeGroup,
+} from "./types";
+import type { User } from "@supabase/supabase-js";
+
+export interface SaveSessionInput {
+  user: User;
+  result: GenerateResult;
+  words: string[];
+  title?: string;
+  situation?: string;
+  difficulty?: string;
+  includeAudio?: boolean;
+}
+
+async function getOrCreateProfileId(
+  admin: ReturnType<typeof createAdminClient>,
+  user: User
+): Promise<string> {
+  const { data: existing } = await admin
+    .from("users")
+    .select("id")
+    .eq("auth_id", user.id)
+    .maybeSingle();
+
+  if (existing?.id) return existing.id;
+
+  const { data: created, error } = await admin
+    .from("users")
+    .insert({
+      auth_id: user.id,
+      email: user.email ?? null,
+      display_name: user.email ?? null,
+    })
+    .select("id")
+    .single();
+
+  if (error) throw error;
+  return created.id;
+}
+
+function normalizeWord(word: string): string {
+  return word.trim().toLowerCase();
+}
+
+export async function saveStudySession(
+  input: SaveSessionInput
+): Promise<{ sessionId: string }> {
+  const admin = createAdminClient();
+  const profileId = await getOrCreateProfileId(admin, input.user);
+  const saveBatchId = crypto.randomUUID();
+
+  let audioPath: string | null = null;
+
+  if (input.includeAudio !== false) {
+    const audioBuffer = await generateAudioFromTxt(input.result.txtContent);
+    audioPath = `${input.user.id}/batches/${saveBatchId}/toeic_sentences.wav`;
+
+    const { error: uploadError } = await admin.storage
+      .from("audio")
+      .upload(audioPath, audioBuffer, {
+        contentType: "audio/wav",
+        upsert: true,
+      });
+
+    if (uploadError) throw uploadError;
+  }
+
+  const wordIdMap = new Map<string, string>();
+  const themeByWord = new Map<string, string>();
+
+  for (const group of input.result.groups) {
+    for (const w of group.words) {
+      themeByWord.set(normalizeWord(w), group.theme);
+    }
+  }
+
+  for (const word of input.words) {
+    const key = normalizeWord(word);
+    if (wordIdMap.has(key)) continue;
+
+    const { data: wordRow, error: wordError } = await admin
+      .from("words")
+      .insert({
+        user_id: profileId,
+        word: word.trim(),
+        theme: themeByWord.get(key) ?? null,
+        situation: input.situation ?? null,
+        difficulty: input.difficulty ?? null,
+        save_batch_id: saveBatchId,
+      })
+      .select("id")
+      .single();
+
+    if (wordError) throw wordError;
+    wordIdMap.set(key, wordRow.id);
+  }
+
+  let sortOrder = 0;
+
+  for (const group of input.result.groups) {
+    for (const sentence of group.sentences) {
+      const { data: sentenceRow, error: sentenceError } = await admin
+        .from("sentences")
+        .insert({
+          user_id: profileId,
+          english: sentence.english,
+          japanese: sentence.japanese,
+          theme: group.theme,
+          txt_content: input.result.txtContent,
+          audio_path: audioPath,
+          situation: input.situation ?? null,
+          difficulty: input.difficulty ?? null,
+          save_batch_id: saveBatchId,
+          sort_order: sortOrder++,
+        })
+        .select("id")
+        .single();
+
+      if (sentenceError) throw sentenceError;
+
+      const linkedWords = new Set<string>();
+
+      for (const used of sentence.wordsUsed) {
+        const key = normalizeWord(used);
+        let wordId = wordIdMap.get(key);
+
+        if (!wordId) {
+          const { data: newWord, error: newWordError } = await admin
+            .from("words")
+            .insert({
+              user_id: profileId,
+              word: used.trim(),
+              theme: group.theme,
+              situation: input.situation ?? null,
+              difficulty: input.difficulty ?? null,
+              save_batch_id: saveBatchId,
+            })
+            .select("id")
+            .single();
+
+          if (newWordError) throw newWordError;
+          wordId = newWord.id as string;
+          wordIdMap.set(key, wordId);
+        }
+
+        if (linkedWords.has(wordId)) continue;
+        linkedWords.add(wordId);
+
+        const { error: linkError } = await admin.from("word_sentences").insert({
+          word_id: wordId,
+          sentence_id: sentenceRow.id,
+        });
+
+        if (linkError) throw linkError;
+      }
+    }
+  }
+
+  return { sessionId: saveBatchId };
+}
+
+export async function listStudySessions(
+  user: User
+): Promise<SavedSessionSummary[]> {
+  const admin = createAdminClient();
+
+  const { data: profile } = await admin
+    .from("users")
+    .select("id")
+    .eq("auth_id", user.id)
+    .maybeSingle();
+
+  if (!profile?.id) return [];
+
+  const { data: batches, error } = await admin
+    .from("sentences")
+    .select("save_batch_id, situation, difficulty, audio_path, created_at")
+    .eq("user_id", profile.id)
+    .order("created_at", { ascending: false });
+
+  if (error) throw error;
+
+  const batchMap = new Map<string, SavedSessionSummary>();
+
+  for (const row of batches ?? []) {
+    if (batchMap.has(row.save_batch_id)) continue;
+
+    const { count: wordCount } = await admin
+      .from("words")
+      .select("*", { count: "exact", head: true })
+      .eq("save_batch_id", row.save_batch_id);
+
+    const { count: sentenceCount } = await admin
+      .from("sentences")
+      .select("*", { count: "exact", head: true })
+      .eq("save_batch_id", row.save_batch_id);
+
+    const title = row.situation
+      ? `${row.situation} (${wordCount ?? 0}語)`
+      : `TOEIC Session ${new Date(row.created_at).toLocaleDateString("ja-JP")}`;
+
+    batchMap.set(row.save_batch_id, {
+      id: row.save_batch_id,
+      title,
+      words: [],
+      total_words: wordCount ?? 0,
+      total_sentences: sentenceCount ?? 0,
+      audio_path: row.audio_path,
+      created_at: row.created_at,
+    });
+  }
+
+  return Array.from(batchMap.values());
+}
+
+export async function getStudySessionDetail(
+  user: User,
+  saveBatchId: string
+): Promise<SavedSessionDetail | null> {
+  const admin = createAdminClient();
+
+  const { data: profile } = await admin
+    .from("users")
+    .select("id")
+    .eq("auth_id", user.id)
+    .maybeSingle();
+
+  if (!profile?.id) return null;
+
+  const { data: sentences, error: sentencesError } = await admin
+    .from("sentences")
+    .select("*")
+    .eq("user_id", profile.id)
+    .eq("save_batch_id", saveBatchId)
+    .order("sort_order");
+
+  if (sentencesError) throw sentencesError;
+  if (!sentences || sentences.length === 0) return null;
+
+  const { data: words, error: wordsError } = await admin
+    .from("words")
+    .select("word, theme")
+    .eq("user_id", profile.id)
+    .eq("save_batch_id", saveBatchId);
+
+  if (wordsError) throw wordsError;
+
+  const first = sentences[0];
+  const themeMap = new Map<string, ThemeGroup>();
+
+  for (const s of sentences) {
+    if (!themeMap.has(s.theme)) {
+      const themeWords = (words ?? [])
+        .filter((w) => w.theme === s.theme)
+        .map((w) => w.word);
+      themeMap.set(s.theme, { theme: s.theme, words: themeWords, sentences: [] });
+    }
+
+    const { data: links } = await admin
+      .from("word_sentences")
+      .select("word_id")
+      .eq("sentence_id", s.id);
+
+    const wordsUsed: string[] = [];
+    for (const link of links ?? []) {
+      const { data: wordRow } = await admin
+        .from("words")
+        .select("word")
+        .eq("id", link.word_id)
+        .maybeSingle();
+      if (wordRow?.word) wordsUsed.push(wordRow.word);
+    }
+
+    themeMap.get(s.theme)!.sentences.push({
+      english: s.english,
+      japanese: s.japanese,
+      wordsUsed,
+    });
+  }
+
+  let audioUrl: string | null = null;
+  if (first.audio_path) {
+    const { data: signed } = await admin.storage
+      .from("audio")
+      .createSignedUrl(first.audio_path, 3600);
+    audioUrl = signed?.signedUrl ?? null;
+  }
+
+  const { count: wordCount } = await admin
+    .from("words")
+    .select("*", { count: "exact", head: true })
+    .eq("save_batch_id", saveBatchId);
+
+  return {
+    id: saveBatchId,
+    title: first.situation
+      ? `${first.situation} (${wordCount ?? 0}語)`
+      : `TOEIC Session ${new Date(first.created_at).toLocaleDateString("ja-JP")}`,
+    words: (words ?? []).map((w) => w.word),
+    situation: first.situation,
+    difficulty: first.difficulty,
+    txt_content: first.txt_content ?? "",
+    total_words: wordCount ?? 0,
+    total_sentences: sentences.length,
+    audio_path: first.audio_path,
+    created_at: first.created_at,
+    groups: Array.from(themeMap.values()),
+    audio_url: audioUrl,
+  };
+}
