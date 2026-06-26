@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "TOEIC Sentence Builder",
-  description: "単語リストからTOEIC向け例文を自動生成",
+  title: "みみたん",
+  description: "耳で覚える、TOEIC英語 — 単語リストから例文を自動生成",
 };
 
 export default function RootLayout({

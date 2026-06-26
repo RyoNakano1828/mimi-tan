@@ -2,7 +2,8 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import AuthPanel from "@/components/AuthPanel";
+import AuthGuard from "@/components/AuthGuard";
+import AppHeader from "@/components/AppHeader";
 import { getAccessToken } from "@/lib/authClient";
 import ThemeCard from "@/components/ThemeCard";
 import StudyMode from "@/components/StudyMode";
@@ -12,7 +13,6 @@ export default function ReviewPage() {
   const [sessions, setSessions] = useState<SavedSessionSummary[]>([]);
   const [selected, setSelected] = useState<SavedSessionDetail | null>(null);
   const [loading, setLoading] = useState(true);
-  const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [error, setError] = useState("");
 
   const fetchSessions = async () => {
@@ -58,104 +58,133 @@ export default function ReviewPage() {
     }
   };
 
+  return (
+    <AuthGuard>
+      {(user) => (
+        <ReviewContent
+          user={user}
+          sessions={sessions}
+          selected={selected}
+          loading={loading}
+          error={error}
+          setSelected={setSelected}
+          loadDetail={loadDetail}
+          fetchSessions={fetchSessions}
+        />
+      )}
+    </AuthGuard>
+  );
+}
+
+import type { User } from "@supabase/supabase-js";
+
+function ReviewContent({
+  user,
+  sessions,
+  selected,
+  loading,
+  error,
+  setSelected,
+  loadDetail,
+  fetchSessions,
+}: {
+  user: User;
+  sessions: SavedSessionSummary[];
+  selected: SavedSessionDetail | null;
+  loading: boolean;
+  error: string;
+  setSelected: (v: SavedSessionDetail | null) => void;
+  loadDetail: (id: string) => void;
+  fetchSessions: () => void;
+}) {
   useEffect(() => {
-    if (isLoggedIn) fetchSessions();
-    else {
-      setLoading(false);
-      setSessions([]);
-    }
-  }, [isLoggedIn]);
+    fetchSessions();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   return (
-    <main style={{ maxWidth: "800px", margin: "0 auto", padding: "48px 20px 80px" }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "32px" }}>
-        <h1 style={{ fontSize: "28px", fontWeight: 800, color: "var(--accent-light)" }}>
-          復習
-        </h1>
-        <Link href="/" style={{ fontSize: "14px", color: "var(--accent-light)" }}>
-          ← トップへ
-        </Link>
-      </div>
+    <>
+      <AppHeader user={user} active="review" />
 
-      <AuthPanel onAuthChange={(user) => setIsLoggedIn(!!user)} />
+      <main className="app-main">
+        <header className="app-hero">
+          <h1 className="app-hero__title">復習</h1>
+          <p className="app-hero__subtitle">保存した例文セッションを確認</p>
+        </header>
 
-      {error && (
-        <p style={{ color: "#fca5a5", textAlign: "center", marginBottom: "16px" }}>{error}</p>
-      )}
+        {error && <p className="app-error">{error}</p>}
 
-      {loading && <p style={{ textAlign: "center", color: "var(--text-muted)" }}>読み込み中...</p>}
+        {loading && !selected && (
+          <p className="app-loading-text">読み込み中...</p>
+        )}
 
-      {!loading && isLoggedIn && !selected && (
-        <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
-          {sessions.length === 0 ? (
-            <p style={{ textAlign: "center", color: "var(--text-muted)" }}>
-              保存されたセッションはありません
-            </p>
-          ) : (
-            sessions.map((s) => (
-              <button
-                key={s.id}
-                onClick={() => loadDetail(s.id)}
-                style={{
-                  textAlign: "left",
-                  padding: "16px 20px",
-                  background: "var(--bg-card)",
-                  border: "1px solid var(--border)",
-                  borderRadius: "var(--radius)",
-                  color: "var(--text-primary)",
-                }}
-              >
-                <div style={{ fontWeight: 700, marginBottom: "4px" }}>
-                  {s.title ?? "Untitled"}
-                </div>
-                <div style={{ fontSize: "13px", color: "var(--text-muted)" }}>
-                  {s.total_words}語 / {s.total_sentences}例文 ·{" "}
-                  {new Date(s.created_at).toLocaleString("ja-JP")}
-                </div>
-              </button>
-            ))
-          )}
-        </div>
-      )}
-
-      {selected && (
-        <>
-          <button
-            onClick={() => setSelected(null)}
-            style={{
-              marginBottom: "20px",
-              padding: "8px 16px",
-              background: "var(--bg-input)",
-              border: "1px solid var(--border)",
-              borderRadius: "8px",
-              color: "var(--text-secondary)",
-            }}
-          >
-            ← 一覧に戻る
-          </button>
-
-          <h2 style={{ fontSize: "20px", marginBottom: "8px" }}>{selected.title}</h2>
-          <p style={{ fontSize: "14px", color: "var(--text-muted)", marginBottom: "24px" }}>
-            {selected.total_words}語 / {selected.total_sentences}例文
-            {selected.situation && ` · ${selected.situation}`}
-            {selected.difficulty && ` · ${selected.difficulty}`}
-          </p>
-
-          {selected.audio_url && (
-            <div style={{ marginBottom: "24px" }}>
-              <audio controls src={selected.audio_url} style={{ width: "100%" }} />
-            </div>
-          )}
-
-          <div style={{ display: "flex", flexDirection: "column", gap: "24px", marginBottom: "32px" }}>
-            {selected.groups.map((group, i) => (
-              <ThemeCard key={`${selected.id}-${group.theme}`} group={group} index={i} />
-            ))}
+        {!loading && !selected && (
+          <div className="review-list">
+            {sessions.length === 0 ? (
+              <div className="review-empty">
+                <p>保存されたセッションはありません</p>
+                <Link href="/app" className="auth-link">
+                  例文を作成する →
+                </Link>
+              </div>
+            ) : (
+              sessions.map((s) => (
+                <button
+                  key={s.id}
+                  type="button"
+                  onClick={() => loadDetail(s.id)}
+                  className="review-item"
+                >
+                  <div className="review-item__title">
+                    {s.title ?? "Untitled"}
+                  </div>
+                  <div className="review-item__meta">
+                    {s.total_words}語 / {s.total_sentences}例文 ·{" "}
+                    {new Date(s.created_at).toLocaleString("ja-JP")}
+                  </div>
+                </button>
+              ))
+            )}
           </div>
+        )}
 
-          <StudyMode groups={selected.groups} />
-        </>
-      )}
-    </main>
+        {selected && (
+          <>
+            <button
+              type="button"
+              onClick={() => setSelected(null)}
+              className="review-back"
+            >
+              ← 一覧に戻る
+            </button>
+
+            <h2 className="review-detail-title">{selected.title}</h2>
+            <p className="review-detail-meta">
+              {selected.total_words}語 / {selected.total_sentences}例文
+              {selected.situation && ` · ${selected.situation}`}
+              {selected.difficulty && ` · ${selected.difficulty}`}
+            </p>
+
+            {selected.audio_url && (
+              <div className="review-audio">
+                <audio controls src={selected.audio_url} style={{ width: "100%" }} />
+              </div>
+            )}
+
+            <div className="app-result-groups">
+              {selected.groups.map((group, i) => (
+                <ThemeCard
+                  key={`${selected.id}-${group.theme}`}
+                  group={group}
+                  index={i}
+                />
+              ))}
+            </div>
+
+            <StudyMode groups={selected.groups} />
+          </>
+        )}
+      </main>
+    </>
   );
 }
