@@ -1,12 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
 import { parseWords } from "@/lib/wordProcessor";
 import { generateSentences } from "@/lib/sentenceGenerator";
+import type { AppStudyMode, WordEntry } from "@/lib/types";
 
 export const maxDuration = 120;
 
+const VALID_MODES: AppStudyMode[] = ["toeic", "daily"];
+
 export async function POST(request: NextRequest) {
   try {
-    const { words: rawInput } = await request.json();
+    const body = await request.json();
+    const { words: rawInput, studyMode: rawMode, wordEntries: rawEntries } =
+      body;
 
     if (!rawInput || typeof rawInput !== "string") {
       return NextResponse.json(
@@ -14,6 +19,9 @@ export async function POST(request: NextRequest) {
         { status: 400 }
       );
     }
+
+    const studyMode: AppStudyMode =
+      rawMode && VALID_MODES.includes(rawMode) ? rawMode : "toeic";
 
     const words = parseWords(rawInput);
 
@@ -31,7 +39,18 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const result = await generateSentences(words);
+    let existingEntries: WordEntry[] | undefined;
+    if (Array.isArray(rawEntries) && rawEntries.length > 0) {
+      existingEntries = rawEntries.filter(
+        (e: unknown): e is WordEntry =>
+          typeof e === "object" &&
+          e !== null &&
+          "word" in e &&
+          typeof (e as WordEntry).word === "string"
+      );
+    }
+
+    const result = await generateSentences(words, studyMode, existingEntries);
     return NextResponse.json(result);
   } catch (error) {
     console.error("Generate error:", error);

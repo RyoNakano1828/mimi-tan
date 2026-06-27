@@ -18,6 +18,7 @@
 | `20260625_0002_drop_legacy.sql` | 旧テーブル削除（移行時のみ） |
 | `20260625_0001_study_sessions.sql` | 4テーブル + RLS + Storage |
 | `20260625_0003_fix_auth_trigger.sql` | 新規登録トリガー修正 |
+| `20260626_0004_study_mode_and_word_japanese.sql` | study_mode + 単語日本語訳 |
 | `20260613_0005_auth_sync.sql` | 新規登録時に users 行を自動作成 |
 
 ## 実行手順（Supabase Dashboard）
@@ -27,6 +28,7 @@
 1. **SQL Editor** → `20260625_0001_study_sessions.sql` を **Run**
 2. 続けて `20260613_0005_auth_sync.sql` を **Run**
 3. **必須** `20260625_0003_fix_auth_trigger.sql` を **Run**（新規登録エラー防止）
+4. `20260626_0004_study_mode_and_word_japanese.sql` を **Run**
 
 ### 旧スキーマ（study_sessions 系）から移行
 

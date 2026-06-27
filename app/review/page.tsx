@@ -1,15 +1,37 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import Link from "next/link";
+import type { User } from "@supabase/supabase-js";
 import AuthGuard from "@/components/AuthGuard";
 import AppHeader from "@/components/AppHeader";
+import DownloadSection from "@/components/DownloadSection";
+import WordListDisplay from "@/components/WordListDisplay";
 import { getAccessToken } from "@/lib/authClient";
 import ThemeCard from "@/components/ThemeCard";
 import StudyMode from "@/components/StudyMode";
+import { STUDY_MODE_LABELS } from "@/lib/types";
 import type { SavedSessionDetail, SavedSessionSummary } from "@/lib/types";
 
 export default function ReviewPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="auth-loading">
+          <span className="auth-spinner" />
+        </div>
+      }
+    >
+      <ReviewPageInner />
+    </Suspense>
+  );
+}
+
+function ReviewPageInner() {
+  const searchParams = useSearchParams();
+  const initialId = searchParams.get("id");
+
   const [sessions, setSessions] = useState<SavedSessionSummary[]>([]);
   const [selected, setSelected] = useState<SavedSessionDetail | null>(null);
   const [loading, setLoading] = useState(true);
@@ -67,6 +89,7 @@ export default function ReviewPage() {
           selected={selected}
           loading={loading}
           error={error}
+          initialId={initialId}
           setSelected={setSelected}
           loadDetail={loadDetail}
           fetchSessions={fetchSessions}
@@ -76,14 +99,13 @@ export default function ReviewPage() {
   );
 }
 
-import type { User } from "@supabase/supabase-js";
-
 function ReviewContent({
   user,
   sessions,
   selected,
   loading,
   error,
+  initialId,
   setSelected,
   loadDetail,
   fetchSessions,
@@ -93,6 +115,7 @@ function ReviewContent({
   selected: SavedSessionDetail | null;
   loading: boolean;
   error: string;
+  initialId: string | null;
   setSelected: (v: SavedSessionDetail | null) => void;
   loadDetail: (id: string) => void;
   fetchSessions: () => void;
@@ -101,6 +124,13 @@ function ReviewContent({
     fetchSessions();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    if (initialId) {
+      loadDetail(initialId);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialId]);
 
   return (
     <>
@@ -135,13 +165,24 @@ function ReviewContent({
                   onClick={() => loadDetail(s.id)}
                   className="review-item"
                 >
-                  <div className="review-item__title">
-                    {s.title ?? "Untitled"}
+                  <div className="review-item__header">
+                    <span className="review-item__title">
+                      {s.title ?? "Untitled"}
+                    </span>
+                    <span className="review-item__mode">
+                      {STUDY_MODE_LABELS[s.study_mode]}
+                    </span>
                   </div>
                   <div className="review-item__meta">
                     {s.total_words}語 / {s.total_sentences}例文 ·{" "}
                     {new Date(s.created_at).toLocaleString("ja-JP")}
                   </div>
+                  {s.word_entries.length > 0 && (
+                    <WordListDisplay
+                      entries={s.word_entries}
+                      compact
+                    />
+                  )}
                 </button>
               ))
             )}
@@ -160,16 +201,28 @@ function ReviewContent({
 
             <h2 className="review-detail-title">{selected.title}</h2>
             <p className="review-detail-meta">
-              {selected.total_words}語 / {selected.total_sentences}例文
+              {STUDY_MODE_LABELS[selected.study_mode]} · {selected.total_words}語
+              / {selected.total_sentences}例文
               {selected.situation && ` · ${selected.situation}`}
               {selected.difficulty && ` · ${selected.difficulty}`}
             </p>
 
+            <WordListDisplay entries={selected.word_entries} />
+
             {selected.audio_url && (
               <div className="review-audio">
-                <audio controls src={selected.audio_url} style={{ width: "100%" }} />
+                <audio
+                  controls
+                  src={selected.audio_url}
+                  style={{ width: "100%" }}
+                />
               </div>
             )}
+
+            <DownloadSection
+              txtContent={selected.txt_content}
+              audioUrl={selected.audio_url}
+            />
 
             <div className="app-result-groups">
               {selected.groups.map((group, i) => (
@@ -177,6 +230,7 @@ function ReviewContent({
                   key={`${selected.id}-${group.theme}`}
                   group={group}
                   index={i}
+                  wordEntries={selected.word_entries}
                 />
               ))}
             </div>

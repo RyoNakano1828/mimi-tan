@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getUserFromRequest } from "@/lib/supabaseAuth";
 import { saveStudySession } from "@/lib/studySessionRepository";
-import type { GenerateResult } from "@/lib/types";
+import type { AppStudyMode, GenerateResult, WordEntry } from "@/lib/types";
 
 export const maxDuration = 300;
 
@@ -13,7 +13,16 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { result, words, title, situation, difficulty, includeAudio } = body;
+    const {
+      result,
+      words,
+      title,
+      situation,
+      difficulty,
+      studyMode,
+      wordEntries,
+      includeAudio,
+    } = body;
 
     if (!result || !words || !Array.isArray(words)) {
       return NextResponse.json(
@@ -29,6 +38,8 @@ export async function POST(request: NextRequest) {
       title,
       situation,
       difficulty,
+      studyMode: studyMode as AppStudyMode | undefined,
+      wordEntries: wordEntries as WordEntry[] | undefined,
       includeAudio: includeAudio !== false,
     });
 

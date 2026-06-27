@@ -4,23 +4,33 @@ import { useState } from "react";
 import WordInput from "@/components/WordInput";
 import WordGeneratorPanel from "@/components/WordGeneratorPanel";
 import ThemeCard from "@/components/ThemeCard";
-import DownloadSection from "@/components/DownloadSection";
 import StudyMode from "@/components/StudyMode";
 import SaveSessionButton from "@/components/SaveSessionButton";
+import StudyModeSelector from "@/components/StudyModeSelector";
+import WordListDisplay from "@/components/WordListDisplay";
 import AuthGuard from "@/components/AuthGuard";
 import AppHeader from "@/components/AppHeader";
-import type { GenerateResult } from "@/lib/types";
+import type { AppStudyMode, GenerateResult, WordEntry } from "@/lib/types";
 
 type InputMode = "manual" | "ai";
 
 export default function MainAppPage() {
+  const [studyMode, setStudyMode] = useState<AppStudyMode>("toeic");
   const [inputMode, setInputMode] = useState<InputMode>("manual");
   const [input, setInput] = useState("");
+  const [wordEntries, setWordEntries] = useState<WordEntry[]>([]);
   const [situation, setSituation] = useState<string>();
   const [difficulty, setDifficulty] = useState<string>();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [result, setResult] = useState<GenerateResult | null>(null);
+
+  const handleStudyModeChange = (mode: AppStudyMode) => {
+    setStudyMode(mode);
+    setResult(null);
+    setWordEntries([]);
+    setError("");
+  };
 
   const handleGenerate = async () => {
     if (!input.trim()) {
@@ -36,7 +46,11 @@ export default function MainAppPage() {
       const res = await fetch("/api/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ words: input }),
+        body: JSON.stringify({
+          words: input,
+          studyMode,
+          wordEntries: wordEntries.length > 0 ? wordEntries : undefined,
+        }),
       });
 
       const data = await res.json();
@@ -46,12 +60,15 @@ export default function MainAppPage() {
       }
 
       setResult(data);
+      setWordEntries(data.wordEntries ?? []);
     } catch (err) {
       setError(err instanceof Error ? err.message : "生成に失敗しました");
     } finally {
       setLoading(false);
     }
   };
+
+  const displayEntries = result?.wordEntries ?? wordEntries;
 
   return (
     <AuthGuard>
@@ -63,9 +80,15 @@ export default function MainAppPage() {
             <header className="app-hero">
               <h1 className="app-hero__title">例文を作成</h1>
               <p className="app-hero__subtitle">
-                単語リストから TOEIC 向け例文を自動生成
+                単語リストから例文を自動生成
               </p>
             </header>
+
+            <StudyModeSelector
+              value={studyMode}
+              onChange={handleStudyModeChange}
+              disabled={loading}
+            />
 
             <div className="input-mode-tabs">
               <button
@@ -86,10 +109,13 @@ export default function MainAppPage() {
 
             {inputMode === "ai" && (
               <WordGeneratorPanel
+                studyMode={studyMode}
                 onWordsGenerated={(words, meta) => {
                   setInput(words);
                   setSituation(meta?.situation);
                   setDifficulty(meta?.difficulty);
+                  setWordEntries(meta?.wordEntries ?? []);
+                  setResult(null);
                 }}
                 disabled={loading}
               />
@@ -99,8 +125,13 @@ export default function MainAppPage() {
               <WordInput value={input} onChange={setInput} disabled={loading} />
             </section>
 
+            {inputMode === "manual" && displayEntries.length > 0 && !result && (
+              <WordListDisplay entries={displayEntries} />
+            )}
+
             <div className="app-generate-wrap">
               <button
+                type="button"
                 onClick={handleGenerate}
                 disabled={loading}
                 className="app-generate-btn"
@@ -123,6 +154,8 @@ export default function MainAppPage() {
 
             {result && !loading && (
               <>
+                <WordListDisplay entries={result.wordEntries} />
+
                 <p className="app-result-summary">
                   {result.totalWords}語 → {result.groups.length}テーマ /{" "}
                   {result.totalSentences}例文を生成しました
@@ -130,15 +163,16 @@ export default function MainAppPage() {
 
                 <div className="app-result-groups">
                   {result.groups.map((group, i) => (
-                    <ThemeCard key={group.theme} group={group} index={i} />
+                    <ThemeCard
+                      key={group.theme}
+                      group={group}
+                      index={i}
+                      wordEntries={result.wordEntries}
+                    />
                   ))}
                 </div>
 
                 <StudyMode groups={result.groups} />
-
-                <div className="app-download-wrap">
-                  <DownloadSection txtContent={result.txtContent} />
-                </div>
 
                 <div className="app-save-wrap">
                   <SaveSessionButton
@@ -146,6 +180,8 @@ export default function MainAppPage() {
                     wordsInput={input}
                     situation={situation}
                     difficulty={difficulty}
+                    studyMode={studyMode}
+                    wordEntries={result.wordEntries}
                     isLoggedIn
                   />
                 </div>

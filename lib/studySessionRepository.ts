@@ -3,11 +3,14 @@ import "server-only";
 import { createAdminClient } from "./supabaseAdmin";
 import { generateAudioFromTxt } from "./tts";
 import type {
+  AppStudyMode,
   GenerateResult,
   SavedSessionDetail,
   SavedSessionSummary,
   ThemeGroup,
+  WordEntry,
 } from "./types";
+import { STUDY_MODE_LABELS } from "./types";
 import type { User } from "@supabase/supabase-js";
 
 export interface SaveSessionInput {
@@ -17,6 +20,8 @@ export interface SaveSessionInput {
   title?: string;
   situation?: string;
   difficulty?: string;
+  studyMode?: AppStudyMode;
+  wordEntries?: WordEntry[];
   includeAudio?: boolean;
 }
 
@@ -50,18 +55,48 @@ function normalizeWord(word: string): string {
   return word.trim().toLowerCase();
 }
 
+function buildTranslationMap(entries: WordEntry[]): Map<string, string> {
+  const map = new Map<string, string>();
+  for (const e of entries) {
+    map.set(normalizeWord(e.word), e.japanese);
+  }
+  return map;
+}
+
+function buildSessionTitle(
+  studyMode: AppStudyMode,
+  situation: string | null | undefined,
+  wordCount: number,
+  createdAt?: string
+): string {
+  const modeLabel = STUDY_MODE_LABELS[studyMode];
+  if (situation) return `${modeLabel} · ${situation} (${wordCount}語)`;
+  const date = createdAt
+    ? new Date(createdAt).toLocaleDateString("ja-JP")
+    : new Date().toLocaleDateString("ja-JP");
+  return `${modeLabel} · ${date} (${wordCount}語)`;
+}
+
 export async function saveStudySession(
   input: SaveSessionInput
 ): Promise<{ sessionId: string }> {
   const admin = createAdminClient();
   const profileId = await getOrCreateProfileId(admin, input.user);
   const saveBatchId = crypto.randomUUID();
+  const studyMode = input.studyMode ?? input.result.studyMode ?? "toeic";
+
+  const wordEntries =
+    input.wordEntries && input.wordEntries.length > 0
+      ? input.wordEntries
+      : input.result.wordEntries ?? [];
+
+  const translationMap = buildTranslationMap(wordEntries);
 
   let audioPath: string | null = null;
 
   if (input.includeAudio !== false) {
     const audioBuffer = await generateAudioFromTxt(input.result.txtContent);
-    audioPath = `${input.user.id}/batches/${saveBatchId}/toeic_sentences.wav`;
+    audioPath = `${input.user.id}/batches/${saveBatchId}/sentences.wav`;
 
     const { error: uploadError } = await admin.storage
       .from("audio")
@@ -91,9 +126,11 @@ export async function saveStudySession(
       .insert({
         user_id: profileId,
         word: word.trim(),
+        japanese: translationMap.get(key) ?? null,
         theme: themeByWord.get(key) ?? null,
         situation: input.situation ?? null,
         difficulty: input.difficulty ?? null,
+        study_mode: studyMode,
         save_batch_id: saveBatchId,
       })
       .select("id")
@@ -118,6 +155,7 @@ export async function saveStudySession(
           audio_path: audioPath,
           situation: input.situation ?? null,
           difficulty: input.difficulty ?? null,
+          study_mode: studyMode,
           save_batch_id: saveBatchId,
           sort_order: sortOrder++,
         })
@@ -138,9 +176,11 @@ export async function saveStudySession(
             .insert({
               user_id: profileId,
               word: used.trim(),
+              japanese: translationMap.get(key) ?? null,
               theme: group.theme,
               situation: input.situation ?? null,
               difficulty: input.difficulty ?? null,
+              study_mode: studyMode,
               save_batch_id: saveBatchId,
             })
             .select("id")
@@ -167,6 +207,24 @@ export async function saveStudySession(
   return { sessionId: saveBatchId };
 }
 
+async function fetchWordEntriesForBatch(
+  admin: ReturnType<typeof createAdminClient>,
+  profileId: string,
+  saveBatchId: string
+): Promise<WordEntry[]> {
+  const { data: words } = await admin
+    .from("words")
+    .select("word, japanese")
+    .eq("user_id", profileId)
+    .eq("save_batch_id", saveBatchId)
+    .order("created_at");
+
+  return (words ?? []).map((w) => ({
+    word: w.word,
+    japanese: w.japanese ?? "",
+  }));
+}
+
 export async function listStudySessions(
   user: User
 ): Promise<SavedSessionSummary[]> {
@@ -182,7 +240,7 @@ export async function listStudySessions(
 
   const { data: batches, error } = await admin
     .from("sentences")
-    .select("save_batch_id, situation, difficulty, audio_path, created_at")
+    .select("save_batch_id, situation, difficulty, audio_path, study_mode, created_at")
     .eq("user_id", profile.id)
     .order("created_at", { ascending: false });
 
@@ -203,17 +261,28 @@ export async function listStudySessions(
       .select("*", { count: "exact", head: true })
       .eq("save_batch_id", row.save_batch_id);
 
-    const title = row.situation
-      ? `${row.situation} (${wordCount ?? 0}語)`
-      : `TOEIC Session ${new Date(row.created_at).toLocaleDateString("ja-JP")}`;
+    const wordEntries = await fetchWordEntriesForBatch(
+      admin,
+      profile.id,
+      row.save_batch_id
+    );
+
+    const studyMode = (row.study_mode as AppStudyMode) ?? "toeic";
 
     batchMap.set(row.save_batch_id, {
       id: row.save_batch_id,
-      title,
-      words: [],
+      title: buildSessionTitle(
+        studyMode,
+        row.situation,
+        wordCount ?? 0,
+        row.created_at
+      ),
+      words: wordEntries.map((w) => w.word),
+      word_entries: wordEntries,
       total_words: wordCount ?? 0,
       total_sentences: sentenceCount ?? 0,
       audio_path: row.audio_path,
+      study_mode: studyMode,
       created_at: row.created_at,
     });
   }
@@ -247,13 +316,19 @@ export async function getStudySessionDetail(
 
   const { data: words, error: wordsError } = await admin
     .from("words")
-    .select("word, theme")
+    .select("word, japanese, theme")
     .eq("user_id", profile.id)
     .eq("save_batch_id", saveBatchId);
 
   if (wordsError) throw wordsError;
 
+  const wordEntries: WordEntry[] = (words ?? []).map((w) => ({
+    word: w.word,
+    japanese: w.japanese ?? "",
+  }));
+
   const first = sentences[0];
+  const studyMode = (first.study_mode as AppStudyMode) ?? "toeic";
   const themeMap = new Map<string, ThemeGroup>();
 
   for (const s of sentences) {
@@ -301,12 +376,17 @@ export async function getStudySessionDetail(
 
   return {
     id: saveBatchId,
-    title: first.situation
-      ? `${first.situation} (${wordCount ?? 0}語)`
-      : `TOEIC Session ${new Date(first.created_at).toLocaleDateString("ja-JP")}`,
-    words: (words ?? []).map((w) => w.word),
+    title: buildSessionTitle(
+      studyMode,
+      first.situation,
+      wordCount ?? 0,
+      first.created_at
+    ),
+    words: wordEntries.map((w) => w.word),
+    word_entries: wordEntries,
     situation: first.situation,
     difficulty: first.difficulty,
+    study_mode: studyMode,
     txt_content: first.txt_content ?? "",
     total_words: wordCount ?? 0,
     total_sentences: sentences.length,

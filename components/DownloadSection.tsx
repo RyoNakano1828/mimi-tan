@@ -2,11 +2,13 @@
 
 interface DownloadSectionProps {
   txtContent: string;
+  audioUrl?: string | null;
   disabled?: boolean;
 }
 
 export default function DownloadSection({
   txtContent,
+  audioUrl,
   disabled,
 }: DownloadSectionProps) {
   const downloadTxt = () => {
@@ -14,12 +16,21 @@ export default function DownloadSection({
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = "toeic_sentences.txt";
+    a.download = "sentences.txt";
     a.click();
     URL.revokeObjectURL(url);
   };
 
   const downloadAudio = async () => {
+    if (audioUrl) {
+      const a = document.createElement("a");
+      a.href = audioUrl;
+      a.download = "sentences.wav";
+      a.target = "_blank";
+      a.click();
+      return;
+    }
+
     const btn = document.getElementById("audio-download-btn");
     if (btn) btn.textContent = "音声生成中...";
 
@@ -39,68 +50,35 @@ export default function DownloadSection({
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = "toeic_sentences.wav";
+      a.download = "sentences.wav";
       a.click();
       URL.revokeObjectURL(url);
     } catch (error) {
       alert(error instanceof Error ? error.message : "音声生成に失敗しました");
     } finally {
-      if (btn) btn.textContent = "Download Audio";
+      if (btn) btn.textContent = "音声をダウンロード";
     }
   };
 
   return (
-    <div
-      style={{
-        display: "flex",
-        gap: "12px",
-        justifyContent: "center",
-        flexWrap: "wrap",
-        padding: "32px 0",
-      }}
-    >
+    <div className="download-section">
       <button
+        type="button"
         onClick={downloadTxt}
-        disabled={disabled}
-        style={{
-          padding: "14px 32px",
-          fontSize: "15px",
-          fontWeight: 600,
-          background: disabled ? "var(--border)" : "var(--accent)",
-          color: "#fff",
-          borderRadius: "var(--radius)",
-          transition: "background 0.2s, transform 0.1s",
-          opacity: disabled ? 0.5 : 1,
-        }}
-        onMouseEnter={(e) => {
-          if (!disabled)
-            (e.target as HTMLButtonElement).style.background =
-              "var(--accent-hover)";
-        }}
-        onMouseLeave={(e) => {
-          if (!disabled)
-            (e.target as HTMLButtonElement).style.background = "var(--accent)";
-        }}
+        disabled={disabled || !txtContent}
+        className="download-section__btn download-section__btn--txt"
       >
-        Download TXT
+        テキストをダウンロード
       </button>
 
       <button
         id="audio-download-btn"
+        type="button"
         onClick={downloadAudio}
-        disabled={disabled}
-        style={{
-          padding: "14px 32px",
-          fontSize: "15px",
-          fontWeight: 600,
-          background: disabled ? "var(--border)" : "var(--success)",
-          color: "#fff",
-          borderRadius: "var(--radius)",
-          transition: "background 0.2s",
-          opacity: disabled ? 0.5 : 1,
-        }}
+        disabled={disabled || !txtContent}
+        className="download-section__btn download-section__btn--audio"
       >
-        Download Audio
+        音声をダウンロード
       </button>
     </div>
   );

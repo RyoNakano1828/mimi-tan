@@ -1,8 +1,9 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { getAccessToken } from "@/lib/authClient";
-import type { GenerateResult } from "@/lib/types";
+import type { AppStudyMode, GenerateResult, WordEntry } from "@/lib/types";
 import { parseWords } from "@/lib/wordProcessor";
 
 interface SaveSessionButtonProps {
@@ -10,6 +11,8 @@ interface SaveSessionButtonProps {
   wordsInput: string;
   situation?: string;
   difficulty?: string;
+  studyMode: AppStudyMode;
+  wordEntries: WordEntry[];
   isLoggedIn: boolean;
 }
 
@@ -18,10 +21,12 @@ export default function SaveSessionButton({
   wordsInput,
   situation,
   difficulty,
+  studyMode,
+  wordEntries,
   isLoggedIn,
 }: SaveSessionButtonProps) {
+  const router = useRouter();
   const [loading, setLoading] = useState(false);
-  const [saved, setSaved] = useState(false);
 
   const handleSave = async () => {
     if (!isLoggedIn) {
@@ -45,6 +50,8 @@ export default function SaveSessionButton({
           words: parseWords(wordsInput),
           situation,
           difficulty,
+          studyMode,
+          wordEntries,
           includeAudio: true,
         }),
       });
@@ -52,8 +59,7 @@ export default function SaveSessionButton({
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "保存に失敗しました");
 
-      setSaved(true);
-      alert("保存しました！復習ページから確認できます。");
+      router.push(`/review?id=${data.sessionId}`);
     } catch (err) {
       alert(err instanceof Error ? err.message : "保存に失敗しました");
     } finally {
@@ -63,19 +69,12 @@ export default function SaveSessionButton({
 
   return (
     <button
+      type="button"
       onClick={handleSave}
-      disabled={loading || saved || !isLoggedIn}
-      style={{
-        padding: "14px 32px",
-        fontSize: "15px",
-        fontWeight: 600,
-        background: saved ? "var(--border)" : "#8b5cf6",
-        color: "#fff",
-        borderRadius: "var(--radius)",
-        opacity: !isLoggedIn ? 0.5 : 1,
-      }}
+      disabled={loading || !isLoggedIn}
+      className="save-session-btn"
     >
-      {loading ? "保存中（音声生成含む）..." : saved ? "保存済み" : "Save to Supabase"}
+      {loading ? "保存中（音声生成含む）..." : "データベースに保存"}
     </button>
   );
 }

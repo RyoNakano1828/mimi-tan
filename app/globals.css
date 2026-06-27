@@ -607,3 +607,255 @@ textarea {
     margin-left: auto;
   }
 }
+
+/* ── Study mode selector ── */
+
+.study-mode-selector {
+  margin-bottom: 24px;
+}
+
+.study-mode-selector__label {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  margin-bottom: 10px;
+}
+
+.study-mode-selector__tabs {
+  display: flex;
+  gap: 10px;
+}
+
+.study-mode-selector__tab {
+  flex: 1;
+  padding: 14px 16px;
+  font-size: 14px;
+  font-weight: 600;
+  background: var(--bg-input);
+  color: var(--text-secondary);
+  border: 2px solid var(--border);
+  border-radius: var(--radius);
+  transition: all 0.2s;
+}
+
+.study-mode-selector__tab--active {
+  background: rgba(59, 130, 246, 0.15);
+  color: var(--accent-light);
+  border-color: var(--accent);
+}
+
+.study-mode-selector__tab:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* ── Word list ── */
+
+.word-list {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 20px 24px;
+  margin-bottom: 24px;
+}
+
+.word-list--compact {
+  padding: 12px 0 0;
+  background: transparent;
+  border: none;
+  margin-bottom: 0;
+}
+
+.word-list__title {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--accent-light);
+  margin-bottom: 12px;
+}
+
+.word-list--compact .word-list__title {
+  font-size: 12px;
+  margin-bottom: 8px;
+  color: var(--text-muted);
+}
+
+.word-list__items {
+  list-style: none;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 8px;
+}
+
+.word-list--compact .word-list__items {
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 6px;
+}
+
+.word-list__item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 10px 12px;
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.word-list--compact .word-list__item {
+  padding: 6px 10px;
+}
+
+.word-list__word {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.word-list__japanese {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+/* ── Word chips in theme cards ── */
+
+.word-chip {
+  display: inline-flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 6px 12px;
+  background: rgba(59, 130, 246, 0.12);
+  border: 1px solid rgba(59, 130, 246, 0.25);
+  border-radius: 10px;
+}
+
+.word-chip__en {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--accent-light);
+}
+
+.word-chip__ja {
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+/* ── Word generator panel ── */
+
+.word-gen-panel {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 24px;
+  margin-bottom: 20px;
+}
+
+.word-gen-panel__title {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--accent-light);
+  margin-bottom: 20px;
+}
+
+.word-gen-panel__range-labels {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-top: 4px;
+}
+
+.word-gen-panel__btn {
+  padding: 14px 24px;
+  font-size: 15px;
+  font-weight: 600;
+  background: var(--success);
+  color: #fff;
+  border-radius: var(--radius);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+}
+
+.word-gen-panel__btn:disabled {
+  background: var(--border);
+}
+
+.word-gen-panel__error {
+  font-size: 13px;
+  color: #fca5a5;
+  text-align: center;
+}
+
+/* ── Save button ── */
+
+.save-session-btn {
+  padding: 14px 32px;
+  font-size: 15px;
+  font-weight: 600;
+  background: #8b5cf6;
+  color: #fff;
+  border-radius: var(--radius);
+}
+
+.save-session-btn:disabled {
+  background: var(--border);
+  cursor: not-allowed;
+}
+
+/* ── Download section ── */
+
+.download-section {
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+  flex-wrap: wrap;
+  padding: 24px 0 32px;
+}
+
+.download-section__btn {
+  padding: 14px 28px;
+  font-size: 15px;
+  font-weight: 600;
+  color: #fff;
+  border-radius: var(--radius);
+  transition: background 0.2s;
+}
+
+.download-section__btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.download-section__btn--txt {
+  background: var(--accent);
+}
+
+.download-section__btn--txt:hover:not(:disabled) {
+  background: var(--accent-hover);
+}
+
+.download-section__btn--audio {
+  background: var(--success);
+}
+
+/* ── Review list enhancements ── */
+
+.review-item__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 4px;
+}
+
+.review-item__mode {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 3px 8px;
+  background: rgba(59, 130, 246, 0.15);
+  color: var(--accent-light);
+  border-radius: 20px;
+  flex-shrink: 0;
+}

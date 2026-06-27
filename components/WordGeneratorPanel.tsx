@@ -1,26 +1,57 @@
 "use client";
 
-import { useState } from "react";
-import { DIFFICULTY_OPTIONS, SITUATION_OPTIONS } from "@/lib/types";
+import { useEffect, useState } from "react";
+import {
+  DIFFICULTY_OPTIONS,
+  DAILY_DIFFICULTY_OPTIONS,
+  DAILY_SITUATION_OPTIONS,
+  SITUATION_OPTIONS,
+  type AppStudyMode,
+  type WordEntry,
+} from "@/lib/types";
+import WordListDisplay from "@/components/WordListDisplay";
 
 interface WordGeneratorPanelProps {
+  studyMode: AppStudyMode;
   onWordsGenerated: (
     words: string,
-    meta?: { situation: string; difficulty: string }
+    meta?: {
+      situation: string;
+      difficulty: string;
+      wordEntries: WordEntry[];
+    }
   ) => void;
   disabled?: boolean;
 }
 
 export default function WordGeneratorPanel({
+  studyMode,
   onWordsGenerated,
   disabled,
 }: WordGeneratorPanelProps) {
-  const [situation, setSituation] = useState<string>(SITUATION_OPTIONS[0]);
+  const isDaily = studyMode === "daily";
+  const situationOptions = isDaily ? DAILY_SITUATION_OPTIONS : SITUATION_OPTIONS;
+  const difficultyOptions = isDaily
+    ? DAILY_DIFFICULTY_OPTIONS
+    : DIFFICULTY_OPTIONS;
+
+  const [situation, setSituation] = useState<string>(situationOptions[0]);
   const [customSituation, setCustomSituation] = useState("");
-  const [difficulty, setDifficulty] = useState<string>(DIFFICULTY_OPTIONS[1].value);
+  const [difficulty, setDifficulty] = useState<string>(
+    difficultyOptions[1]?.value ?? difficultyOptions[0].value
+  );
   const [count, setCount] = useState(10);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [generatedEntries, setGeneratedEntries] = useState<WordEntry[]>([]);
+
+  useEffect(() => {
+    setSituation(situationOptions[0]);
+    setCustomSituation("");
+    setDifficulty(difficultyOptions[1]?.value ?? difficultyOptions[0].value);
+    setGeneratedEntries([]);
+    setError("");
+  }, [studyMode]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const effectiveSituation =
     situation === "custom" ? customSituation.trim() : situation;
@@ -33,6 +64,7 @@ export default function WordGeneratorPanel({
 
     setLoading(true);
     setError("");
+    setGeneratedEntries([]);
 
     try {
       const res = await fetch("/api/generate-words", {
@@ -42,6 +74,7 @@ export default function WordGeneratorPanel({
           situation: effectiveSituation,
           difficulty,
           count,
+          studyMode,
         }),
       });
 
@@ -50,10 +83,16 @@ export default function WordGeneratorPanel({
         throw new Error(data.error || "単語生成に失敗しました");
       }
 
-      onWordsGenerated(data.words.join("\n"), {
-        situation: effectiveSituation,
-        difficulty,
-      });
+      const entries: WordEntry[] = data.words;
+      setGeneratedEntries(entries);
+      onWordsGenerated(
+        entries.map((e) => e.word).join("\n"),
+        {
+          situation: effectiveSituation,
+          difficulty,
+          wordEntries: entries,
+        }
+      );
     } catch (err) {
       setError(err instanceof Error ? err.message : "単語生成に失敗しました");
     } finally {
@@ -80,25 +119,8 @@ export default function WordGeneratorPanel({
   };
 
   return (
-    <div
-      style={{
-        background: "var(--bg-card)",
-        border: "1px solid var(--border)",
-        borderRadius: "var(--radius)",
-        padding: "24px",
-        marginBottom: "20px",
-      }}
-    >
-      <h2
-        style={{
-          fontSize: "16px",
-          fontWeight: 700,
-          color: "var(--accent-light)",
-          marginBottom: "20px",
-        }}
-      >
-        AIで頻出単語を生成
-      </h2>
+    <div className="word-gen-panel">
+      <h2 className="word-gen-panel__title">AIで単語を生成</h2>
 
       <div style={{ display: "flex", flexDirection: "column", gap: "18px" }}>
         <div>
@@ -109,7 +131,7 @@ export default function WordGeneratorPanel({
             disabled={disabled || loading}
             style={fieldStyle}
           >
-            {SITUATION_OPTIONS.map((opt) => (
+            {situationOptions.map((opt) => (
               <option key={opt} value={opt}>
                 {opt}
               </option>
@@ -121,7 +143,9 @@ export default function WordGeneratorPanel({
               type="text"
               value={customSituation}
               onChange={(e) => setCustomSituation(e.target.value)}
-              placeholder="例: 海外出張・空港・ホテル"
+              placeholder={
+                isDaily ? "例: ペット・動物" : "例: 海外出張・空港・ホテル"
+              }
               disabled={disabled || loading}
               style={{ ...fieldStyle, marginTop: "10px" }}
             />
@@ -136,7 +160,7 @@ export default function WordGeneratorPanel({
             disabled={disabled || loading}
             style={fieldStyle}
           >
-            {DIFFICULTY_OPTIONS.map((opt) => (
+            {difficultyOptions.map((opt) => (
               <option key={opt.value} value={opt.value}>
                 {opt.label}
               </option>
@@ -145,9 +169,7 @@ export default function WordGeneratorPanel({
         </div>
 
         <div>
-          <label style={labelStyle}>
-            単語数: {count}個
-          </label>
+          <label style={labelStyle}>単語数: {count}個</label>
           <input
             type="range"
             min={5}
@@ -157,57 +179,28 @@ export default function WordGeneratorPanel({
             disabled={disabled || loading}
             style={{ width: "100%", accentColor: "var(--accent)" }}
           />
-          <div
-            style={{
-              display: "flex",
-              justifyContent: "space-between",
-              fontSize: "12px",
-              color: "var(--text-muted)",
-              marginTop: "4px",
-            }}
-          >
+          <div className="word-gen-panel__range-labels">
             <span>5</span>
             <span>30</span>
           </div>
         </div>
 
         <button
+          type="button"
           onClick={handleGenerate}
           disabled={disabled || loading}
-          style={{
-            padding: "14px 24px",
-            fontSize: "15px",
-            fontWeight: 600,
-            background: loading ? "var(--border)" : "var(--success)",
-            color: "#fff",
-            borderRadius: "var(--radius)",
-            display: "inline-flex",
-            alignItems: "center",
-            justifyContent: "center",
-            gap: "10px",
-          }}
+          className="word-gen-panel__btn"
         >
-          {loading && (
-            <span
-              style={{
-                width: "16px",
-                height: "16px",
-                border: "2px solid rgba(255,255,255,0.3)",
-                borderTopColor: "#fff",
-                borderRadius: "50%",
-                animation: "spin 0.8s linear infinite",
-              }}
-            />
-          )}
-          {loading ? "単語を生成中..." : "Generate Words"}
+          {loading && <span className="auth-spinner auth-spinner--sm" />}
+          {loading ? "単語を生成中..." : "単語を生成"}
         </button>
 
-        {error && (
-          <p style={{ fontSize: "13px", color: "#fca5a5", textAlign: "center" }}>
-            {error}
-          </p>
-        )}
+        {error && <p className="word-gen-panel__error">{error}</p>}
       </div>
+
+      {generatedEntries.length > 0 && (
+        <WordListDisplay entries={generatedEntries} title="生成された単語" />
+      )}
     </div>
   );
 }

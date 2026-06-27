@@ -1,13 +1,29 @@
 "use client";
 
-import type { ThemeGroup } from "@/lib/types";
+import type { ThemeGroup, WordEntry } from "@/lib/types";
 
 interface ThemeCardProps {
   group: ThemeGroup;
   index: number;
+  wordEntries?: WordEntry[];
 }
 
-export default function ThemeCard({ group, index }: ThemeCardProps) {
+function lookupJapanese(
+  word: string,
+  entries?: WordEntry[]
+): string | undefined {
+  if (!entries) return undefined;
+  const found = entries.find(
+    (e) => e.word.trim().toLowerCase() === word.trim().toLowerCase()
+  );
+  return found?.japanese || undefined;
+}
+
+export default function ThemeCard({
+  group,
+  index,
+  wordEntries,
+}: ThemeCardProps) {
   return (
     <div
       style={{
@@ -36,25 +52,19 @@ export default function ThemeCard({ group, index }: ThemeCardProps) {
         style={{
           display: "flex",
           flexWrap: "wrap",
-          gap: "6px",
+          gap: "8px",
           marginBottom: "20px",
         }}
       >
-        {group.words.map((word) => (
-          <span
-            key={word}
-            style={{
-              fontSize: "12px",
-              padding: "3px 10px",
-              background: "rgba(59, 130, 246, 0.15)",
-              color: "var(--accent-light)",
-              borderRadius: "20px",
-              border: "1px solid rgba(59, 130, 246, 0.3)",
-            }}
-          >
-            {word}
-          </span>
-        ))}
+        {group.words.map((word) => {
+          const ja = lookupJapanese(word, wordEntries);
+          return (
+            <span key={word} className="word-chip">
+              <span className="word-chip__en">{word}</span>
+              {ja && <span className="word-chip__ja">{ja}</span>}
+            </span>
+          );
+        })}
       </div>
 
       {group.sentences.map((sentence, i) => (
