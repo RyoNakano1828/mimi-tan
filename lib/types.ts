@@ -24,13 +24,16 @@ export interface GenerateResult {
   totalWords: number;
   totalSentences: number;
   studyMode: AppStudyMode;
+  sourceJapanese?: string;
+  themes?: string[];
+  situations?: string[];
 }
 
 export interface WordGenerateResult {
   words: WordEntry[];
-  situation: string;
+  themes: string[];
+  situations: string[] | null;
   difficulty: string;
-  studyMode: AppStudyMode;
 }
 
 export const SITUATION_OPTIONS = [
@@ -72,6 +75,12 @@ export const STUDY_MODE_LABELS: Record<AppStudyMode, string> = {
   daily: "日常会話",
 };
 
+export interface UserPreferenceItem {
+  id: string;
+  name: string;
+  created_at: string;
+}
+
 export interface SavedSessionSummary {
   id: string;
   title: string | null;
@@ -87,6 +96,9 @@ export interface SavedSessionSummary {
 export interface SavedSessionDetail extends SavedSessionSummary {
   situation: string | null;
   difficulty: string | null;
+  source_japanese: string | null;
+  themes: string[] | null;
+  situations: string[] | null;
   txt_content: string;
   groups: ThemeGroup[];
   audio_url: string | null;

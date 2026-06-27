@@ -1,61 +1,60 @@
 import { generateJson } from "./gemini";
-import type { AppStudyMode, WordEntry } from "./types";
+import type { WordEntry } from "./types";
 
 interface WordGenerateResponse {
   words: { word: string; japanese: string }[];
 }
 
-const TOEIC_DIFFICULTY_GUIDE: Record<string, string> = {
-  "400-500":
-    "TOEIC 400〜500点レベル。基本的なビジネス英単語（agree, meeting, report など）",
-  "600":
-    "TOEIC 600点前后レベル。実務でよく使う中級ビジネス英単語（negotiate, deadline, budget など）",
-  "700-800":
-    "TOEIC 700〜800点レベル。やや高度なビジネス英単語（compliance, procurement, stakeholder など）",
-};
-
-const DAILY_DIFFICULTY_GUIDE: Record<string, string> = {
-  beginner: "初級。基本的な日常英単語（buy, eat, happy など）",
-  intermediate:
-    "中級。日常会話でよく使う表現（appointment, recommend, convenient など）",
-  advanced:
-    "上級。自然な日常会話表現（figure out, hang out, catch up など）",
+const DIFFICULTY_GUIDE: Record<string, string> = {
+  "400-500": "初級（400〜500点）。基本的な英単語",
+  "600": "中級（600点前後）。実用的な英単語",
+  "700-800": "上級（700〜800点）。やや高度な英単語",
+  beginner: "初級。基本的な日常英単語",
+  intermediate: "中級。日常会話でよく使う表現",
+  advanced: "上級。自然な日常会話表現",
 };
 
 export async function generateWords(
-  situation: string,
+  themes: string[],
+  situations: string[] | null,
   difficulty: string,
-  count: number,
-  studyMode: AppStudyMode = "toeic"
+  count: number
 ): Promise<WordEntry[]> {
-  const isDaily = studyMode === "daily";
-  const difficultyGuide = isDaily
-    ? (DAILY_DIFFICULTY_GUIDE[difficulty] ?? DAILY_DIFFICULTY_GUIDE.intermediate)
-    : (TOEIC_DIFFICULTY_GUIDE[difficulty] ?? TOEIC_DIFFICULTY_GUIDE["600"]);
+  if (themes.length === 0) {
+    throw new Error("テーマを1つ以上選択してください");
+  }
 
-  const context = isDaily
-    ? "日常会話で使われる英単語"
-    : "TOEICで頻出するビジネス英単語";
+  const difficultyGuide =
+    DIFFICULTY_GUIDE[difficulty] ?? DIFFICULTY_GUIDE["600"];
 
-  const prompt = `あなたは英語学習教材の専門家です。指定されたシチュエーションと難易度に合った、${context}をピックアップしてください。
+  const situationBlock =
+    situations && situations.length > 0
+      ? `シチュエーション: ${situations.join(", ")}`
+      : `シチュエーション: AIがテーマに合った場面を自動で選んでください（例: 会議、空港、レストランなど）`;
 
-シチュエーション: ${situation}
+  const prompt = `あなたは英語学習教材の専門家です。指定されたテーマとシチュエーションに合った英単語をピックアップしてください。
+
+テーマ（何について学ぶか）: ${themes.join(", ")}
+${situationBlock}
 難易度: ${difficultyGuide}
 単語数: ${count}個
 
+テーマとシチュエーションの関係:
+- テーマは生成する英単語の種類・分野を決める
+- シチュエーションはその単語が使われる場面のイメージ（例文生成時に参照される）
+
 条件:
-- ${isDaily ? "日常会話で実際に使える自然な英単語" : "TOEIC Part 5/6/7 で実際に出題されやすいビジネス英単語"}を選ぶ
-- 指定シチュエーションに関連性の高い単語を優先
+- 指定テーマに関連性の高い英単語を選ぶ
 - 名詞・動詞・形容詞をバランスよく含める
-- 1語のみ（熟語は2語まで可、例: "due date"）
+- 1語のみ（熟語は2語まで可）
 - 各単語に自然な日本語訳を付ける
 - 重複なし
 - 正確に${count}個
 
-JSON形式で返答:
+JSON形式:
 {
   "words": [
-    { "word": "Word1", "japanese": "日本語訳1" }
+    { "word": "agenda", "japanese": "議題" }
   ]
 }`;
 

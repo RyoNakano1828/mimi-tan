@@ -1,40 +1,69 @@
 import { generateJson } from "./gemini";
-import { getGroupCount, getThemeList } from "./themes";
-import type { AppStudyMode, GenerateResult, ThemeGroup } from "./types";
+import { getGroupCount } from "./themes";
+import type { AppStudyMode, GenerateResult, ThemeGroup, WordEntry } from "./types";
 import { formatTxt } from "./txtFormatter";
-import { fetchWordTranslations } from "./wordTranslator";
 
 interface FullGenerateResponse {
   groups: ThemeGroup[];
 }
 
-function buildPrompt(
+export interface GenerateSentencesOptions {
+  words: string[];
+  wordEntries?: WordEntry[];
+  studyMode?: AppStudyMode;
+  sourceJapanese?: string;
+  themes?: string[];
+  situations?: string[];
+}
+
+function resolveGroupingThemes(
   words: string[],
-  themes: readonly string[],
-  studyMode: AppStudyMode
-): string {
-  if (studyMode === "daily") {
-    return `あなたは英語学習支援の専門家です。以下の英単語を使い、テーマ別に日常会話レベルの自然な英語例文を作成してください。
+  themes?: string[]
+): string[] {
+  const groupCount = getGroupCount(words.length);
+  if (themes && themes.length > 0) {
+    return themes.slice(0, Math.min(groupCount, themes.length));
+  }
+  return ["例文グループ1", "例文グループ2"].slice(
+    0,
+    Math.min(groupCount, 2)
+  );
+}
 
-単語リスト: ${words.join(", ")}
+function buildPrompt(options: GenerateSentencesOptions): string {
+  const { words, sourceJapanese, themes, situations } = options;
+  const groupingThemes = resolveGroupingThemes(words, themes);
+  const situationText =
+    situations && situations.length > 0
+      ? situations.join(", ")
+      : "内容に応じて適切な場面";
 
-使用するテーマ（${themes.length}グループ）:
-${themes.map((t, i) => `${i + 1}. ${t}`).join("\n")}
+  if (sourceJapanese?.trim()) {
+    return `あなたは英語学習支援の専門家です。ユーザーが日本語で書いた文章を英語にする際に使う単語と例文を作成します。
+「英語でなんていうんだろう？」を解決しつつ、必要な単語を例文と一緒に覚えられるようにしてください。
 
-## Step1: テーマ別分類
-- すべての単語を必ず1つ以上のグループに割り当てる
-- 各グループに最低1単語を割り当てる
-- 関連性の高い単語を同じグループにまとめる
-- グループ数は正確に${themes.length}個
+## 元の日本語
+${sourceJapanese.trim()}
 
-## Step2: 各テーマごとに例文生成
-- 日常会話で使える自然な英語（カジュアル〜やや丁寧）
-- 各文は10〜20語程度
-- 各文に最低2つの指定単語を使用
-- グループ内の全単語を必ずすべて使用する
-- 自然な日本語訳も付ける
+## 使用する英単語
+${words.join(", ")}
 
-JSON形式で返答:
+## シチュエーション（例文の場面）
+${situationText}
+
+## グループ分け用テーマ（${groupingThemes.length}グループ）
+${groupingThemes.map((t, i) => `${i + 1}. ${t}`).join("\n")}
+
+## 条件
+- 例文の英語は、元の日本語の意味・ニュアンスにできるだけ近い表現にする
+- 指定した英単語をすべて必ず1回以上使用する
+- 各文に最低2つの指定単語を含める
+- 自然で実用的な英語（15〜25語程度）
+- 各文に自然な日本語訳を付ける（元の日本語に近い訳）
+- シチュエーションに合った会話・文章のトーンにする
+- グループ数は正確に${groupingThemes.length}個
+
+JSON形式:
 {
   "groups": [
     {
@@ -52,28 +81,26 @@ JSON形式で返答:
 }`;
   }
 
-  return `あなたはTOEIC学習支援の専門家です。以下の英単語を使い、テーマ別にTOEIC 600点レベルのビジネス英語例文を作成してください。
+  return `あなたは英語学習支援の専門家です。以下の英単語を使い、テーマ別に例文を作成してください。
 
-単語リスト: ${words.join(", ")}
+## 使用する英単語
+${words.join(", ")}
 
-使用するテーマ（${themes.length}グループ）:
-${themes.map((t, i) => `${i + 1}. ${t}`).join("\n")}
+## テーマ（${groupingThemes.length}グループ）
+${groupingThemes.map((t, i) => `${i + 1}. ${t}`).join("\n")}
 
-## Step1: テーマ別分類
-- すべての単語を必ず1つ以上のグループに割り当てる
-- 各グループに最低1単語を割り当てる
-- 関連性の高い単語を同じグループにまとめる
-- グループ数は正確に${themes.length}個
+## シチュエーション（例文の場面・内容）
+${situationText}
 
-## Step2: 各テーマごとに例文生成
-- TOEIC中級レベル（600点前後）のビジネス英語
-- 各文は15〜25語程度
-- 自然で実用的な英語
+## 条件
+- シチュエーションに合った場面設定で例文を書く
 - 各文に最低2つの指定単語を使用
 - グループ内の全単語を必ずすべて使用する
+- 自然で実用的な英語（15〜25語程度）
 - 自然な日本語訳も付ける
+- グループ数は正確に${groupingThemes.length}個
 
-JSON形式で返答:
+JSON形式:
 {
   "groups": [
     {
@@ -92,15 +119,22 @@ JSON形式で返答:
 }
 
 export async function generateSentences(
-  words: string[],
-  studyMode: AppStudyMode = "toeic",
-  existingWordEntries?: { word: string; japanese: string }[]
+  options: GenerateSentencesOptions
 ): Promise<GenerateResult> {
-  const groupCount = getGroupCount(words.length);
-  const themeList = getThemeList(studyMode);
-  const themes = themeList.slice(0, Math.min(groupCount, themeList.length));
+  const {
+    words,
+    wordEntries: existingWordEntries,
+    studyMode = "toeic",
+    sourceJapanese,
+    themes,
+    situations,
+  } = options;
 
-  const prompt = buildPrompt(words, themes, studyMode);
+  if (words.length === 0) {
+    throw new Error("単語が選択されていません");
+  }
+
+  const prompt = buildPrompt(options);
   const result = await generateJson<FullGenerateResponse>(prompt, 0.5);
 
   const groups = result.groups.filter(
@@ -110,9 +144,7 @@ export async function generateSentences(
   const totalSentences = groups.reduce((sum, g) => sum + g.sentences.length, 0);
 
   let wordEntries = existingWordEntries ?? [];
-  if (wordEntries.length === 0) {
-    wordEntries = await fetchWordTranslations(words, studyMode);
-  } else {
+  if (wordEntries.length > 0) {
     const map = new Map(
       wordEntries.map((e) => [e.word.trim().toLowerCase(), e.japanese])
     );
@@ -120,6 +152,8 @@ export async function generateSentences(
       word,
       japanese: map.get(word.trim().toLowerCase()) ?? "",
     }));
+  } else {
+    wordEntries = words.map((word) => ({ word, japanese: "" }));
   }
 
   return {
@@ -129,5 +163,8 @@ export async function generateSentences(
     totalWords: words.length,
     totalSentences,
     studyMode,
+    sourceJapanese: sourceJapanese?.trim() || undefined,
+    themes: themes?.length ? themes : undefined,
+    situations: situations?.length ? situations : undefined,
   };
 }

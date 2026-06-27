@@ -1,38 +1,40 @@
 import { NextRequest, NextResponse } from "next/server";
 import { generateWords } from "@/lib/aiWordGenerator";
-import {
-  DIFFICULTY_OPTIONS,
-  DAILY_DIFFICULTY_OPTIONS,
-  type AppStudyMode,
-} from "@/lib/types";
+import { DIFFICULTY_OPTIONS } from "@/lib/types";
 
 export const maxDuration = 60;
 
-const VALID_TOEIC_DIFFICULTIES = DIFFICULTY_OPTIONS.map((d) => d.value);
-const VALID_DAILY_DIFFICULTIES = DAILY_DIFFICULTY_OPTIONS.map((d) => d.value);
-const VALID_MODES: AppStudyMode[] = ["toeic", "daily"];
+const VALID_DIFFICULTIES = [
+  ...DIFFICULTY_OPTIONS.map((d) => d.value),
+  "beginner",
+  "intermediate",
+  "advanced",
+];
 
 export async function POST(request: NextRequest) {
   try {
-    const { situation, difficulty, count, studyMode: rawMode } =
+    const { themes, situations, situationAuto, difficulty, count } =
       await request.json();
 
-    const studyMode: AppStudyMode =
-      rawMode && VALID_MODES.includes(rawMode) ? rawMode : "toeic";
-
-    if (!situation || typeof situation !== "string" || !situation.trim()) {
+    if (!Array.isArray(themes) || themes.length === 0) {
       return NextResponse.json(
-        { error: "シチュエーションを指定してください" },
+        { error: "テーマを1つ以上選択してください" },
         { status: 400 }
       );
     }
 
-    const validDifficulties: string[] =
-      studyMode === "daily"
-        ? [...VALID_DAILY_DIFFICULTIES]
-        : [...VALID_TOEIC_DIFFICULTIES];
+    const themeList = themes.filter(
+      (t: unknown): t is string => typeof t === "string" && t.trim().length > 0
+    );
 
-    if (!difficulty || !validDifficulties.includes(difficulty)) {
+    let situationList: string[] | null = null;
+    if (!situationAuto && Array.isArray(situations) && situations.length > 0) {
+      situationList = situations.filter(
+        (s: unknown): s is string => typeof s === "string" && s.trim().length > 0
+      );
+    }
+
+    if (!difficulty || !VALID_DIFFICULTIES.includes(difficulty)) {
       return NextResponse.json(
         { error: "難易度を指定してください" },
         { status: 400 }
@@ -48,10 +50,10 @@ export async function POST(request: NextRequest) {
     }
 
     const words = await generateWords(
-      situation.trim(),
+      themeList,
+      situationList,
       difficulty,
-      wordCount,
-      studyMode
+      wordCount
     );
 
     if (words.length === 0) {
@@ -63,9 +65,9 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       words,
-      situation: situation.trim(),
+      themes: themeList,
+      situations: situationList,
       difficulty,
-      studyMode,
     });
   } catch (error) {
     console.error("Word generation error:", error);

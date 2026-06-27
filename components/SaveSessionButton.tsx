@@ -3,26 +3,25 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { getAccessToken } from "@/lib/authClient";
-import type { AppStudyMode, GenerateResult, WordEntry } from "@/lib/types";
-import { parseWords } from "@/lib/wordProcessor";
+import type { GenerateResult } from "@/lib/types";
 
 interface SaveSessionButtonProps {
   result: GenerateResult;
-  wordsInput: string;
-  situation?: string;
+  selectedWords: string[];
+  themes?: string[];
+  situations?: string[];
   difficulty?: string;
-  studyMode: AppStudyMode;
-  wordEntries: WordEntry[];
+  sourceJapanese?: string;
   isLoggedIn: boolean;
 }
 
 export default function SaveSessionButton({
   result,
-  wordsInput,
-  situation,
+  selectedWords,
+  themes,
+  situations,
   difficulty,
-  studyMode,
-  wordEntries,
+  sourceJapanese,
   isLoggedIn,
 }: SaveSessionButtonProps) {
   const router = useRouter();
@@ -47,11 +46,13 @@ export default function SaveSessionButton({
         },
         body: JSON.stringify({
           result,
-          words: parseWords(wordsInput),
-          situation,
+          words: selectedWords,
+          themes: themes ?? result.themes,
+          situations: situations ?? result.situations,
           difficulty,
-          studyMode,
-          wordEntries,
+          sourceJapanese: sourceJapanese ?? result.sourceJapanese,
+          studyMode: result.studyMode,
+          wordEntries: result.wordEntries,
           includeAudio: true,
         }),
       });

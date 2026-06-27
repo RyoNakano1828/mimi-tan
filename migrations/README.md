@@ -29,6 +29,7 @@
 2. 続けて `20260613_0005_auth_sync.sql` を **Run**
 3. **必須** `20260625_0003_fix_auth_trigger.sql` を **Run**（新規登録エラー防止）
 4. `20260626_0004_study_mode_and_word_japanese.sql` を **Run**
+5. `20260627_0005_user_themes_situations.sql` を **Run**
 
 ### 旧スキーマ（study_sessions 系）から移行
 

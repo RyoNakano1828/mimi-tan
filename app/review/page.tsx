@@ -201,11 +201,22 @@ function ReviewContent({
 
             <h2 className="review-detail-title">{selected.title}</h2>
             <p className="review-detail-meta">
-              {STUDY_MODE_LABELS[selected.study_mode]} · {selected.total_words}語
-              / {selected.total_sentences}例文
-              {selected.situation && ` · ${selected.situation}`}
+              {selected.themes && selected.themes.length > 0
+                ? selected.themes.join(" · ")
+                : STUDY_MODE_LABELS[selected.study_mode]}{" "}
+              · {selected.total_words}語 / {selected.total_sentences}例文
+              {selected.situations &&
+                selected.situations.length > 0 &&
+                ` · ${selected.situations.join(" · ")}`}
               {selected.difficulty && ` · ${selected.difficulty}`}
             </p>
+
+            {selected.source_japanese && (
+              <blockquote className="source-japanese">
+                <span className="source-japanese__label">元の日本語</span>
+                {selected.source_japanese}
+              </blockquote>
+            )}
 
             <WordListDisplay entries={selected.word_entries} />
 

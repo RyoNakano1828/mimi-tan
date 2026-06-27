@@ -22,6 +22,9 @@ export interface SaveSessionInput {
   difficulty?: string;
   studyMode?: AppStudyMode;
   wordEntries?: WordEntry[];
+  sourceJapanese?: string;
+  themes?: string[];
+  situations?: string[];
   includeAudio?: boolean;
 }
 
@@ -65,16 +68,22 @@ function buildTranslationMap(entries: WordEntry[]): Map<string, string> {
 
 function buildSessionTitle(
   studyMode: AppStudyMode,
+  themes: string[] | null | undefined,
   situation: string | null | undefined,
   wordCount: number,
   createdAt?: string
 ): string {
-  const modeLabel = STUDY_MODE_LABELS[studyMode];
-  if (situation) return `${modeLabel} · ${situation} (${wordCount}語)`;
+  if (themes && themes.length > 0) {
+    const label = themes.slice(0, 2).join("・");
+    return `${label} (${wordCount}語)`;
+  }
+  if (situation) {
+    return `${STUDY_MODE_LABELS[studyMode]} · ${situation} (${wordCount}語)`;
+  }
   const date = createdAt
     ? new Date(createdAt).toLocaleDateString("ja-JP")
     : new Date().toLocaleDateString("ja-JP");
-  return `${modeLabel} · ${date} (${wordCount}語)`;
+  return `${STUDY_MODE_LABELS[studyMode]} · ${date} (${wordCount}語)`;
 }
 
 export async function saveStudySession(
@@ -84,6 +93,11 @@ export async function saveStudySession(
   const profileId = await getOrCreateProfileId(admin, input.user);
   const saveBatchId = crypto.randomUUID();
   const studyMode = input.studyMode ?? input.result.studyMode ?? "toeic";
+  const sessionThemes = input.themes ?? input.result.themes ?? null;
+  const sessionSituations =
+    input.situations ?? input.result.situations ?? null;
+  const sourceJapanese =
+    input.sourceJapanese ?? input.result.sourceJapanese ?? null;
 
   const wordEntries =
     input.wordEntries && input.wordEntries.length > 0
@@ -156,6 +170,9 @@ export async function saveStudySession(
           situation: input.situation ?? null,
           difficulty: input.difficulty ?? null,
           study_mode: studyMode,
+          source_japanese: sourceJapanese,
+          themes: sessionThemes,
+          situations: sessionSituations,
           save_batch_id: saveBatchId,
           sort_order: sortOrder++,
         })
@@ -240,7 +257,9 @@ export async function listStudySessions(
 
   const { data: batches, error } = await admin
     .from("sentences")
-    .select("save_batch_id, situation, difficulty, audio_path, study_mode, created_at")
+    .select(
+      "save_batch_id, situation, difficulty, audio_path, study_mode, themes, created_at"
+    )
     .eq("user_id", profile.id)
     .order("created_at", { ascending: false });
 
@@ -268,11 +287,13 @@ export async function listStudySessions(
     );
 
     const studyMode = (row.study_mode as AppStudyMode) ?? "toeic";
+    const themes = (row.themes as string[] | null) ?? null;
 
     batchMap.set(row.save_batch_id, {
       id: row.save_batch_id,
       title: buildSessionTitle(
         studyMode,
+        themes,
         row.situation,
         wordCount ?? 0,
         row.created_at
@@ -329,6 +350,9 @@ export async function getStudySessionDetail(
 
   const first = sentences[0];
   const studyMode = (first.study_mode as AppStudyMode) ?? "toeic";
+  const sessionThemes = (first.themes as string[] | null) ?? null;
+  const sessionSituations = (first.situations as string[] | null) ?? null;
+  const sourceJapanese = (first.source_japanese as string | null) ?? null;
   const themeMap = new Map<string, ThemeGroup>();
 
   for (const s of sentences) {
@@ -378,6 +402,7 @@ export async function getStudySessionDetail(
     id: saveBatchId,
     title: buildSessionTitle(
       studyMode,
+      sessionThemes,
       first.situation,
       wordCount ?? 0,
       first.created_at
@@ -387,6 +412,9 @@ export async function getStudySessionDetail(
     situation: first.situation,
     difficulty: first.difficulty,
     study_mode: studyMode,
+    source_japanese: sourceJapanese,
+    themes: sessionThemes,
+    situations: sessionSituations,
     txt_content: first.txt_content ?? "",
     total_words: wordCount ?? 0,
     total_sentences: sentences.length,

@@ -21,6 +21,9 @@ export async function POST(request: NextRequest) {
       difficulty,
       studyMode,
       wordEntries,
+      sourceJapanese,
+      themes,
+      situations,
       includeAudio,
     } = body;
 
@@ -40,6 +43,9 @@ export async function POST(request: NextRequest) {
       difficulty,
       studyMode: studyMode as AppStudyMode | undefined,
       wordEntries: wordEntries as WordEntry[] | undefined,
+      sourceJapanese,
+      themes,
+      situations,
       includeAudio: includeAudio !== false,
     });
 
