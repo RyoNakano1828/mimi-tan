@@ -10,6 +10,7 @@ import WordSelector, {
   allWordKeys,
   selectedWordsList,
 } from "@/components/WordSelector";
+import EnglishTranslationDisplay from "@/components/EnglishTranslationDisplay";
 import AuthGuard from "@/components/AuthGuard";
 import AppHeader from "@/components/AppHeader";
 import type { GenerateResult, WordEntry } from "@/lib/types";
@@ -19,6 +20,7 @@ type InputMode = "manual" | "ai";
 export default function MainAppPage() {
   const [inputMode, setInputMode] = useState<InputMode>("manual");
   const [japaneseInput, setJapaneseInput] = useState("");
+  const [englishTranslation, setEnglishTranslation] = useState("");
   const [wordEntries, setWordEntries] = useState<WordEntry[]>([]);
   const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set());
   const [themes, setThemes] = useState<string[]>([]);
@@ -32,6 +34,7 @@ export default function MainAppPage() {
 
   const resetWords = () => {
     setWordEntries([]);
+    setEnglishTranslation("");
     setSelectedKeys(new Set());
     setWordsReady(false);
     setResult(null);
@@ -65,6 +68,7 @@ export default function MainAppPage() {
       if (!res.ok) throw new Error(data.error || "単語抽出に失敗しました");
 
       const entries: WordEntry[] = data.wordEntries;
+      setEnglishTranslation(data.englishTranslation ?? "");
       setWordEntries(entries);
       setSelectedKeys(allWordKeys(entries));
       setWordsReady(true);
@@ -111,6 +115,8 @@ export default function MainAppPage() {
           wordEntries,
           sourceJapanese:
             inputMode === "manual" ? japaneseInput.trim() : undefined,
+          sourceEnglishTranslation:
+            inputMode === "manual" ? englishTranslation : undefined,
           themes: themes.length > 0 ? themes : undefined,
           situations: situations && situations.length > 0 ? situations : undefined,
         }),
@@ -193,6 +199,13 @@ export default function MainAppPage() {
               />
             )}
 
+            {wordsReady && englishTranslation && inputMode === "manual" && (
+              <EnglishTranslationDisplay
+                english={englishTranslation}
+                japanese={japaneseInput.trim()}
+              />
+            )}
+
             {wordsReady && wordEntries.length > 0 && !result && (
               <WordSelector
                 entries={wordEntries}
@@ -235,10 +248,18 @@ export default function MainAppPage() {
                 </p>
 
                 {result.sourceJapanese && (
-                  <blockquote className="source-japanese">
-                    <span className="source-japanese__label">元の日本語</span>
-                    {result.sourceJapanese}
-                  </blockquote>
+                  <EnglishTranslationDisplay
+                    english={
+                      result.sourceEnglishTranslation ?? englishTranslation
+                    }
+                    japanese={result.sourceJapanese}
+                  />
+                )}
+
+                {!result.sourceJapanese && result.sourceEnglishTranslation && (
+                  <EnglishTranslationDisplay
+                    english={result.sourceEnglishTranslation}
+                  />
                 )}
 
                 <div className="app-result-groups">

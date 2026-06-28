@@ -1,5 +1,5 @@
 import { generateJson } from "./gemini";
-import { getGroupCount } from "./themes";
+import { getSentencePlan } from "./themes";
 import type { AppStudyMode, GenerateResult, ThemeGroup, WordEntry } from "./types";
 import { formatTxt } from "./txtFormatter";
 
@@ -12,56 +12,76 @@ export interface GenerateSentencesOptions {
   wordEntries?: WordEntry[];
   studyMode?: AppStudyMode;
   sourceJapanese?: string;
+  sourceEnglishTranslation?: string;
   themes?: string[];
   situations?: string[];
 }
 
 function resolveGroupingThemes(
-  words: string[],
+  wordCount: number,
   themes?: string[]
-): string[] {
-  const groupCount = getGroupCount(words.length);
+): { groupingThemes: string[]; maxSentences: number } {
+  const plan = getSentencePlan(wordCount);
+  const groupCount = plan.groups;
+
+  let groupingThemes: string[];
   if (themes && themes.length > 0) {
-    return themes.slice(0, Math.min(groupCount, themes.length));
+    groupingThemes = themes.slice(0, Math.min(groupCount, themes.length));
+  } else {
+    groupingThemes = Array.from(
+      { length: groupCount },
+      (_, i) => `例文${i + 1}`
+    );
   }
-  return ["例文グループ1", "例文グループ2"].slice(
-    0,
-    Math.min(groupCount, 2)
-  );
+
+  return { groupingThemes, maxSentences: plan.maxSentences };
 }
 
+const CASUAL_STYLE = `- カジュアルで短い英文（6〜12語程度、会話調・口語OK）
+- 堅いビジネス文より、日常会話に近い自然な言い回し`;
+
 function buildPrompt(options: GenerateSentencesOptions): string {
-  const { words, sourceJapanese, themes, situations } = options;
-  const groupingThemes = resolveGroupingThemes(words, themes);
+  const { words, sourceJapanese, sourceEnglishTranslation, themes, situations } =
+    options;
+  const { groupingThemes, maxSentences } = resolveGroupingThemes(
+    words.length,
+    themes
+  );
   const situationText =
     situations && situations.length > 0
       ? situations.join(", ")
       : "内容に応じて適切な場面";
 
+  const sentenceBudget = `- 例文の合計数は最大${maxSentences}個（これ以上作らない）
+- グループ数は正確に${groupingThemes.length}個
+- 1グループあたり1〜2文程度に抑える`;
+
+  const englishRef = sourceEnglishTranslation?.trim()
+    ? `\n## 参考英訳\n${sourceEnglishTranslation.trim()}`
+    : "";
+
   if (sourceJapanese?.trim()) {
-    return `あなたは英語学習支援の専門家です。ユーザーが日本語で書いた文章を英語にする際に使う単語と例文を作成します。
-「英語でなんていうんだろう？」を解決しつつ、必要な単語を例文と一緒に覚えられるようにしてください。
+    return `あなたは英語学習支援の専門家です。ユーザーが日本語で書いた文章を英語にする際に使う単語と、短い例文を作成します。
 
 ## 元の日本語
 ${sourceJapanese.trim()}
+${englishRef}
 
 ## 使用する英単語
 ${words.join(", ")}
 
-## シチュエーション（例文の場面）
+## シチュエーション
 ${situationText}
 
-## グループ分け用テーマ（${groupingThemes.length}グループ）
+## グループ（${groupingThemes.length}個）
 ${groupingThemes.map((t, i) => `${i + 1}. ${t}`).join("\n")}
 
 ## 条件
-- 例文の英語は、元の日本語の意味・ニュアンスにできるだけ近い表現にする
+- 例文は元の日本語の意味に近い英語にする
 - 指定した英単語をすべて必ず1回以上使用する
-- 各文に最低2つの指定単語を含める
-- 自然で実用的な英語（15〜25語程度）
-- 各文に自然な日本語訳を付ける（元の日本語に近い訳）
-- シチュエーションに合った会話・文章のトーンにする
-- グループ数は正確に${groupingThemes.length}個
+${CASUAL_STYLE}
+- 各文に自然な日本語訳を付ける
+${sentenceBudget}
 
 JSON形式:
 {
@@ -81,7 +101,7 @@ JSON形式:
 }`;
   }
 
-  return `あなたは英語学習支援の専門家です。以下の英単語を使い、テーマ別に例文を作成してください。
+  return `あなたは英語学習支援の専門家です。以下の英単語を使い、短い例文を作成してください。
 
 ## 使用する英単語
 ${words.join(", ")}
@@ -89,16 +109,15 @@ ${words.join(", ")}
 ## テーマ（${groupingThemes.length}グループ）
 ${groupingThemes.map((t, i) => `${i + 1}. ${t}`).join("\n")}
 
-## シチュエーション（例文の場面・内容）
+## シチュエーション
 ${situationText}
 
 ## 条件
-- シチュエーションに合った場面設定で例文を書く
-- 各文に最低2つの指定単語を使用
-- グループ内の全単語を必ずすべて使用する
-- 自然で実用的な英語（15〜25語程度）
+- シチュエーションに合った場面で例文を書く
+- 指定した全単語を必ず1回以上使用する
+${CASUAL_STYLE}
 - 自然な日本語訳も付ける
-- グループ数は正確に${groupingThemes.length}個
+${sentenceBudget}
 
 JSON形式:
 {
@@ -116,6 +135,24 @@ JSON形式:
     }
   ]
 }`;
+}
+
+function trimToSentenceBudget(
+  groups: ThemeGroup[],
+  maxSentences: number
+): ThemeGroup[] {
+  let remaining = maxSentences;
+  const trimmed: ThemeGroup[] = [];
+
+  for (const group of groups) {
+    if (remaining <= 0) break;
+    const sentences = group.sentences.slice(0, remaining);
+    if (sentences.length === 0) continue;
+    trimmed.push({ ...group, sentences });
+    remaining -= sentences.length;
+  }
+
+  return trimmed;
 }
 
 export async function generateSentences(
@@ -126,6 +163,7 @@ export async function generateSentences(
     wordEntries: existingWordEntries,
     studyMode = "toeic",
     sourceJapanese,
+    sourceEnglishTranslation,
     themes,
     situations,
   } = options;
@@ -134,11 +172,13 @@ export async function generateSentences(
     throw new Error("単語が選択されていません");
   }
 
+  const { maxSentences } = getSentencePlan(words.length);
   const prompt = buildPrompt(options);
   const result = await generateJson<FullGenerateResponse>(prompt, 0.5);
 
-  const groups = result.groups.filter(
-    (g) => g.words.length > 0 && g.sentences.length > 0
+  const groups = trimToSentenceBudget(
+    result.groups.filter((g) => g.words.length > 0 && g.sentences.length > 0),
+    maxSentences
   );
   const txtContent = formatTxt(groups);
   const totalSentences = groups.reduce((sum, g) => sum + g.sentences.length, 0);
@@ -164,6 +204,7 @@ export async function generateSentences(
     totalSentences,
     studyMode,
     sourceJapanese: sourceJapanese?.trim() || undefined,
+    sourceEnglishTranslation: sourceEnglishTranslation?.trim() || undefined,
     themes: themes?.length ? themes : undefined,
     situations: situations?.length ? situations : undefined,
   };

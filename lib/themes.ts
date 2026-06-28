@@ -32,10 +32,18 @@ export function getThemeList(studyMode: AppStudyMode): readonly string[] {
 }
 
 export function getGroupCount(wordCount: number): number {
-  if (wordCount <= 6) return 2;
-  if (wordCount <= 12) return 3;
-  if (wordCount <= 20) return 4;
-  if (wordCount <= 30) return 6;
-  if (wordCount <= 40) return 8;
-  return 10;
+  return getSentencePlan(wordCount).groups;
+}
+
+/** 単語数に応じた例文数・グループ数（学習負担を抑える） */
+export function getSentencePlan(wordCount: number): {
+  groups: number;
+  maxSentences: number;
+} {
+  if (wordCount <= 3) return { groups: 1, maxSentences: 1 };
+  if (wordCount <= 5) return { groups: 1, maxSentences: 2 };
+  if (wordCount <= 8) return { groups: 1, maxSentences: 2 };
+  if (wordCount <= 12) return { groups: 2, maxSentences: 3 };
+  if (wordCount <= 18) return { groups: 2, maxSentences: 4 };
+  return { groups: 2, maxSentences: 5 };
 }

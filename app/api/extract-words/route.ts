@@ -26,7 +26,7 @@ export async function POST(request: NextRequest) {
         ? themes.filter((t): t is string => typeof t === "string")
         : undefined;
 
-    const wordEntries = await extractWordsFromJapanese(
+    const { englishTranslation, wordEntries } = await extractWordsFromJapanese(
       japaneseText.trim(),
       themeList
     );
@@ -38,7 +38,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    return NextResponse.json({ wordEntries });
+    return NextResponse.json({ englishTranslation, wordEntries });
   } catch (error) {
     console.error("Extract words error:", error);
     const message =

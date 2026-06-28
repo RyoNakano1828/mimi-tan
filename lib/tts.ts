@@ -1,101 +1,19 @@
 import "server-only";
 
-import fs from "fs";
-import path from "path";
-import { TextToSpeechClient } from "@google-cloud/text-to-speech";
-
-function parseCredentialsJson(value: string): object {
-  const trimmed = value.trim();
-
-  if (!trimmed || trimmed === "{") {
-    throw new Error("認証情報 JSON が空、または不完全です");
-  }
-
-  const attempts: string[] = [trimmed];
-
-  // .env に改行入り JSON を1行で入れた場合の \n エスケープを復元
-  if (trimmed.includes("\\n")) {
-    attempts.push(trimmed.replace(/\\n/g, "\n"));
-  }
-
-  for (const candidate of attempts) {
-    if (candidate.startsWith("{")) {
-      try {
-        const parsed = JSON.parse(candidate);
-        if (parsed && typeof parsed === "object" && parsed.type === "service_account") {
-          return parsed;
-        }
-      } catch {
-        // 次の形式を試す
-      }
-    }
-  }
-
-  try {
-    const decoded = Buffer.from(trimmed, "base64").toString("utf-8");
-    const parsed = JSON.parse(decoded);
-    if (parsed && typeof parsed === "object" && parsed.type === "service_account") {
-      return parsed;
-    }
-  } catch {
-    // fall through
-  }
-
-  throw new Error(
-    "GOOGLE_APPLICATION_CREDENTIALS_JSON の形式が不正です。" +
-      "1行の JSON、Base64、または GOOGLE_APPLICATION_CREDENTIALS にファイルパスを指定してください。"
-  );
-}
-
-function loadCredentialsFromJsonEnv(): object | null {
-  const credentialsJson = process.env.GOOGLE_APPLICATION_CREDENTIALS_JSON?.trim();
-  if (!credentialsJson || credentialsJson === "{") {
-    return null;
-  }
-
-  try {
-    return parseCredentialsJson(credentialsJson);
-  } catch {
-    return null;
-  }
-}
-
-function loadCredentialsFromFile(): object | null {
-  const credentialsPath = process.env.GOOGLE_APPLICATION_CREDENTIALS?.trim();
-  if (!credentialsPath) {
-    return null;
-  }
-
-  const resolvedPath = path.isAbsolute(credentialsPath)
-    ? credentialsPath
-    : path.join(process.cwd(), credentialsPath);
-
-  if (!fs.existsSync(resolvedPath)) {
-    throw new Error(
-      `GOOGLE_APPLICATION_CREDENTIALS のファイルが見つかりません: ${resolvedPath}`
-    );
-  }
-
-  const raw = fs.readFileSync(resolvedPath, "utf-8");
-  const parsed = JSON.parse(raw);
-  if (!parsed || typeof parsed !== "object" || parsed.type !== "service_account") {
-    throw new Error("サービスアカウント JSON の形式が不正です");
-  }
-  return parsed;
-}
+const TTS_ENDPOINT =
+  "https://texttospeech.googleapis.com/v1/text:synthesize";
 
 const SILENCE_MS = 1000;
 const SAMPLE_RATE = 24000;
 
-// 文字起こし.py と同じ音声設定
 const VOICE_ENGLISH = {
   languageCode: "en-US",
-  name: "en-US-Neural2-F", // 英語（女性声）
+  name: "en-US-Neural2-F",
 } as const;
 
 const VOICE_JAPANESE = {
   languageCode: "ja-JP",
-  name: "ja-JP-Neural2-B", // 日本語（女性声）
+  name: "ja-JP-Neural2-B",
 } as const;
 
 const AUDIO_CONFIG = {
@@ -103,35 +21,17 @@ const AUDIO_CONFIG = {
   speakingRate: 1.0,
 };
 
-function getTtsClient(): TextToSpeechClient {
-  const credentialsFromFile = loadCredentialsFromFile();
-  if (credentialsFromFile) {
-    return new TextToSpeechClient({
-      credentials: credentialsFromFile,
-    });
-  }
-
-  const credentialsFromJson = loadCredentialsFromJsonEnv();
-  if (credentialsFromJson) {
-    return new TextToSpeechClient({
-      credentials: credentialsFromJson,
-    });
-  }
-
-  const jsonEnv = process.env.GOOGLE_APPLICATION_CREDENTIALS_JSON?.trim();
-  if (jsonEnv && jsonEnv !== "{" && jsonEnv.length > 10) {
+function getApiKey(): string {
+  const key = process.env.GOOGLE_TTS_API_KEY?.trim();
+  if (!key) {
     throw new Error(
-      "GOOGLE_APPLICATION_CREDENTIALS_JSON を読み込めませんでした。" +
-        "ローカル開発では GOOGLE_APPLICATION_CREDENTIALS=credentials/gcp-tts-service-account.json を使ってください。"
+      "GOOGLE_TTS_API_KEY が設定されていません。.env または Vercel の環境変数に API キーを追加してください。"
     );
   }
-
-  return new TextToSpeechClient();
+  return key;
 }
 
 function isEnglish(text: string): boolean {
-  // 文字起こし.py の is_english と同じ判定:
-  // ASCII 文字（英数字・記号・空白）を除き、残りがなければ英語
   const clean = text.replace(/[\x00-\x7F]/g, "");
   return clean.length === 0;
 }
@@ -179,25 +79,36 @@ function createSilence(durationMs: number, sampleRate = SAMPLE_RATE): Buffer {
   return buffer;
 }
 
-async function synthesizeLine(
-  client: TextToSpeechClient,
-  text: string,
-  isEng: boolean
-): Promise<Buffer> {
-  // 英語と日本語で声と言語を切り替える（文字起こし.py と同等）
+async function synthesizeLine(text: string, isEng: boolean): Promise<Buffer> {
+  const apiKey = getApiKey();
   const voice = isEng ? VOICE_ENGLISH : VOICE_JAPANESE;
 
-  const [response] = await client.synthesizeSpeech({
-    input: { text },
-    voice,
-    audioConfig: AUDIO_CONFIG,
+  const res = await fetch(`${TTS_ENDPOINT}?key=${encodeURIComponent(apiKey)}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      input: { text },
+      voice,
+      audioConfig: AUDIO_CONFIG,
+    }),
   });
 
-  return Buffer.from(response.audioContent as Uint8Array);
+  if (!res.ok) {
+    const errBody = await res.text().catch(() => "");
+    throw new Error(
+      `TTS API エラー (${res.status}): ${errBody.slice(0, 200) || res.statusText}`
+    );
+  }
+
+  const data = (await res.json()) as { audioContent?: string };
+  if (!data.audioContent) {
+    throw new Error("TTS API から音声データが返されませんでした");
+  }
+
+  return Buffer.from(data.audioContent, "base64");
 }
 
 export async function generateAudioFromTxt(txtContent: string): Promise<Buffer> {
-  const client = getTtsClient();
   const lines = txtContent.trim().split("\n");
   const audioBuffers: Buffer[] = [];
   const silence = createSilence(SILENCE_MS);
@@ -207,9 +118,8 @@ export async function generateAudioFromTxt(txtContent: string): Promise<Buffer> 
     if (!trimmed || trimmed.startsWith("#")) continue;
     if (/^\d+$/.test(trimmed)) continue;
 
-    // 英語か日本語かを自動判定（文字起こし.py と同等）
     const isEng = isEnglish(trimmed);
-    const audio = await synthesizeLine(client, trimmed, isEng);
+    const audio = await synthesizeLine(trimmed, isEng);
     audioBuffers.push(audio);
     audioBuffers.push(silence);
   }

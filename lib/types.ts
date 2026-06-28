@@ -25,6 +25,7 @@ export interface GenerateResult {
   totalSentences: number;
   studyMode: AppStudyMode;
   sourceJapanese?: string;
+  sourceEnglishTranslation?: string;
   themes?: string[];
   situations?: string[];
 }

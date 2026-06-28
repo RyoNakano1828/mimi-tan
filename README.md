@@ -33,24 +33,23 @@ npm install
 GEMINI_API_KEY=your-gemini-api-key
 ```
 
-音声生成を使う場合は Google Cloud のサービスアカウントが必要です。
-
-**ローカル開発** — JSONキーファイルのパスを指定:
+音声生成を使う場合は Google Cloud Text-to-Speech API の **API キー** が必要です（取得方法は下記）。
 
 ```env
-GOOGLE_APPLICATION_CREDENTIALS=C:\path\to\service-account.json
+GOOGLE_TTS_API_KEY=your-google-cloud-api-key
 ```
 
-**Vercel デプロイ** — 環境変数 `GOOGLE_APPLICATION_CREDENTIALS_JSON` に JSON の中身をそのまま貼り付け:
+**Vercel デプロイ** — Vercel ダッシュボード → Project → Settings → Environment Variables に `GOOGLE_TTS_API_KEY` を設定してください。Production / Preview / Development すべてにチェックを入れてください。
 
-```
-{"type":"service_account","project_id":"your-project",...}
-```
+### Google Cloud TTS API キーの取得手順
 
-Vercel ダッシュボード → Project → Settings → Environment Variables で設定できます。
-Production / Preview / Development すべてにチェックを入れてください。
+1. [Google Cloud Console](https://console.cloud.google.com/) でプロジェクトを選択（または新規作成）
+2. **API とサービス** → **ライブラリ** → 「Cloud Text-to-Speech API」を検索 → **有効化**
+3. **API とサービス** → **認証情報** → **認証情報を作成** → **API キー**
+4. 作成されたキーをコピーし、`.env` の `GOOGLE_TTS_API_KEY` に設定
+5. （推奨）作成した API キーの **編集** → **API の制限** → 「Cloud Text-to-Speech API」のみに限定
 
-Base64 エンコードした JSON でも動作します（どちらか一方だけ設定）。
+請求先アカウントのリンクが必要な場合があります（無料枠あり）。Neural2 音声は従量課金です。
 
 ### 3. 開発サーバー起動
 
@@ -66,7 +65,7 @@ http://localhost:3000 でアクセス
 2. [Vercel](https://vercel.com) でインポート
 3. 環境変数を設定:
    - `GEMINI_API_KEY` — 例文生成（必須）
-   - `GOOGLE_APPLICATION_CREDENTIALS_JSON` — 音声生成（JSONをそのまま貼り付け）
+   - `GOOGLE_TTS_API_KEY` — 音声生成
 4. デプロイ
 
 ## 既存の Python スクリプト

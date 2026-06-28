@@ -14,6 +14,7 @@ export async function POST(request: NextRequest) {
       wordEntries: rawEntries,
       studyMode: rawMode,
       sourceJapanese,
+      sourceEnglishTranslation,
       themes,
       situations,
     } = body;
@@ -66,6 +67,10 @@ export async function POST(request: NextRequest) {
       studyMode,
       sourceJapanese:
         typeof sourceJapanese === "string" ? sourceJapanese : undefined,
+      sourceEnglishTranslation:
+        typeof sourceEnglishTranslation === "string"
+          ? sourceEnglishTranslation
+          : undefined,
       themes: themeList,
       situations: situationList,
     });
